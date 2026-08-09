@@ -120,6 +120,29 @@ func TestPackageNameFromProject(t *testing.T) {
 	}
 }
 
+func TestPostProcessProjectRunsFormattingAndTests(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skip integration test in short mode")
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/demo\n\ngo 1.22\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "cmd", "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mainPath := filepath.Join(dir, "cmd", "server", "main.go")
+	if err := os.WriteFile(mainPath, []byte("package main\n\nfunc main(){}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	gen := &generator.Generator{}
+	if err := gen.PostProcessProject(dir); err != nil {
+		t.Fatalf("PostProcessProject() error = %v", err)
+	}
+}
+
 func TestGeneratorInit(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skip integration test in short mode")

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -53,7 +54,7 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 		PackageName:  PackageNameFromProject(opts.ProjectName),
 		HTTPPort:     opts.HTTPPort,
 		DatabaseName: opts.DatabaseName,
-		GoVersion:    "1.22",
+		GoVersion:    "1.25",
 		Author:       opts.Author,
 	}
 
@@ -80,27 +81,86 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 		return plan, nil
 	}
 
-	if err := g.initGoMod(opts.TargetDir, opts.ModulePath); err != nil {
+	if err := g.initGoMod(opts.TargetDir, opts.ModulePath, data.GoVersion); err != nil {
 		_ = os.RemoveAll(opts.TargetDir)
+		return plan, err
+	}
+
+	if err := g.PostProcessProject(opts.TargetDir); err != nil {
 		return plan, err
 	}
 
 	return plan, nil
 }
 
-func (g *Generator) initGoMod(dir, modulePath string) error {
+func (g *Generator) initGoMod(dir, modulePath, goVersion string) error {
 	cmd := exec.Command("go", "mod", "init", modulePath)
 	cmd.Dir = dir
+
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("go mod init : %s: %w", trimOutput(string(out)), err)
 	}
 
+	cmd = exec.Command("go", "mod", "edit", "-go="+goVersion)
+	cmd.Dir = dir
+
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("go mod edit : %s: %w", trimOutput(string(out)), err)
+	}
+
 	cmd = exec.Command("go", "mod", "tidy")
 	cmd.Dir = dir
+
 	out, err = cmd.CombinedOutput()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[warn] go mod tidy a échoué : %s\n", trimOutput(string(out)))
+	}
+
+	return nil
+}
+
+// PostProcessProject formats Go sources and runs the test suite for the generated project.
+func (g *Generator) PostProcessProject(dir string) error {
+	if strings.TrimSpace(dir) == "" {
+		return fmt.Errorf("le répertoire cible ne peut pas être vide")
+	}
+
+	var files []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if path != dir && (filepath.Base(path) == ".git" || filepath.Base(path) == "vendor") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) == ".go" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("parcourir le projet : %w", err)
+	}
+
+	if len(files) > 0 {
+		cmd := exec.Command("gofmt", append([]string{"-w"}, files...)...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("gofmt : %s: %w", trimOutput(string(out)), err)
+		}
+	}
+
+	cmd := exec.Command("go", "test", "./...")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("go test : %s: %w", trimOutput(string(out)), err)
 	}
 
 	return nil
