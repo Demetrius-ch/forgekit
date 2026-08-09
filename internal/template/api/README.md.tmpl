@@ -1,0 +1,56 @@
+# {{ .ProjectName }}
+
+Backend REST Go généré par [ForgeKit](https://github.com/forgekit/forgekit).
+
+Auteur : {{ .Author }}
+
+## Architecture
+
+```
+cmd/                 → entrée, wiring, graceful shutdown
+internal/domain/     → entités + interfaces (ports)
+internal/application/→ cas d'usage (User, Health)
+internal/infrastructure/ → PostgreSQL, configuration
+internal/transport/  → HTTP (Chi)
+migrations/          → schéma PostgreSQL
+tests/               → intégration (placeholder)
+```
+
+**Dépendances autorisées :**
+
+| Couche | Peut importer |
+|--------|---------------|
+| domain | stdlib uniquement |
+| application | domain |
+| infrastructure | domain, drivers externes |
+| transport | application, domain, infrastructure (composition root) |
+
+## Démarrage
+
+```bash
+cp .env.example .env
+docker compose -f docker/docker-compose.yml up --build
+curl http://localhost:{{ .HTTPPort }}/health
+curl -X POST http://localhost:{{ .HTTPPort }}/users -d '{"email":"a@b.com","name":"Alice"}' -H 'Content-Type: application/json'
+```
+
+## Tests
+
+```bash
+go test ./...
+```
+
+## Configuration
+
+| Variable | Défaut |
+|----------|--------|
+| `HTTP_PORT` | {{ .HTTPPort }} |
+| `DATABASE_URL` | requis |
+
+## Vérification ForgeKit
+
+```bash
+forge doctor
+forge check
+forge analyze
+```

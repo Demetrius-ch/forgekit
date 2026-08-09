@@ -1,0 +1,27 @@
+package health
+
+import (
+	"context"
+	"fmt"
+
+	"{{ .ModulePath }}/internal/domain"
+)
+
+type DatabasePing interface {
+	Ping(ctx context.Context) error
+}
+
+type Service struct {
+	db DatabasePing
+}
+
+func NewService(db DatabasePing) *Service {
+	return &Service{db: db}
+}
+
+func (s *Service) Check(ctx context.Context) (domain.HealthStatus, error) {
+	if err := s.db.Ping(ctx); err != nil {
+		return domain.HealthStatus{}, fmt.Errorf("ping postgres: %w", err)
+	}
+	return domain.HealthStatus{Status: "ok", Service: "{{ .ProjectName }}"}, nil
+}

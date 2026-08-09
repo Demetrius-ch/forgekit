@@ -1,0 +1,44 @@
+package http
+
+import (
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+
+	"{{ .ModulePath }}/internal/application/health"
+	"{{ .ModulePath }}/internal/application/user"
+	"{{ .ModulePath }}/internal/domain"
+	"{{ .ModulePath }}/internal/infrastructure/postgres"
+	"{{ .ModulePath }}/internal/transport/http/handler"
+)
+
+func NewRouter(logger *slog.Logger, pool *postgres.Pool, userRepo domain.UserRepository) http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Timeout(30 * time.Second))
+
+	healthSvc := health.NewService(pool)
+	userSvc := user.NewService(userRepo)
+
+	r.Get("/health", handler.NewHealth(logger, healthSvc).ServeHTTP)
+	r.Post("/users", handler.NewUser(logger, userSvc).Create)
+
+	return r
+}
+
+func NewServer(addr string, handler http.Handler, logger *slog.Logger) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
+	}
+}

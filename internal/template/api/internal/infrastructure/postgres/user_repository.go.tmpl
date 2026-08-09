@@ -1,0 +1,44 @@
+package postgres
+
+import (
+	"context"
+	"fmt"
+
+	"{{ .ModulePath }}/internal/domain"
+)
+
+type UserRepository struct {
+	pool *Pool
+}
+
+func NewUserRepository(pool *Pool) *UserRepository {
+	return &UserRepository{pool: pool}
+}
+
+func (r *UserRepository) FindByEmail(email string) (*domain.User, error) {
+	row := r.pool.QueryRow(context.Background(),
+		`SELECT id, email, name, created_at FROM users WHERE email = $1`, email)
+	var u domain.User
+	if err := row.Scan(&u.ID, &u.Email, &u.Name, &u.CreatedAt); err != nil {
+		if isNoRows(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("find user: %w", err)
+	}
+	return &u, nil
+}
+
+func (r *UserRepository) Create(user domain.User) (*domain.User, error) {
+	row := r.pool.QueryRow(context.Background(),
+		`INSERT INTO users (email, name) VALUES ($1, $2) RETURNING id, email, name, created_at`,
+		user.Email, user.Name)
+	var u domain.User
+	if err := row.Scan(&u.ID, &u.Email, &u.Name, &u.CreatedAt); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+	return &u, nil
+}
+
+func isNoRows(err error) bool {
+	return err != nil && err.Error() == "no rows in result set"
+}

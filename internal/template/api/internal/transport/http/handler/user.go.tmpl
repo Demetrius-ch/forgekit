@@ -1,0 +1,39 @@
+package handler
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+
+	appuser "{{ .ModulePath }}/internal/application/user"
+)
+
+type User struct {
+	logger *slog.Logger
+	svc    *appuser.Service
+}
+
+func NewUser(logger *slog.Logger, svc *appuser.Service) *User {
+	return &User{logger: logger, svc: svc}
+}
+
+type createUserRequest struct {
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
+func (h *User) Create(w http.ResponseWriter, r *http.Request) {
+	var req createUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "json invalide"})
+		return
+	}
+	u, err := h.svc.Register(req.Email, req.Name)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id": u.ID, "email": u.Email, "name": u.Name,
+	})
+}

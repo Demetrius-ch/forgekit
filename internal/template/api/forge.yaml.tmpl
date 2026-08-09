@@ -1,0 +1,15 @@
+project:
+  language: go
+  module: "{{ .ModulePath }}"
+
+architecture:
+  rules:
+    - from: domain
+      to: infrastructure
+      allow: false
+    - from: domain
+      to: transport
+      allow: false
+    - from: application
+      to: transport
+      allow: false

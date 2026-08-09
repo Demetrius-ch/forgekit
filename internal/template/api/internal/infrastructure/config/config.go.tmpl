@@ -1,0 +1,33 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+)
+
+type Config struct {
+	HTTPAddr    string
+	DatabaseURL string
+}
+
+func Load() (Config, error) {
+	port := getenv("HTTP_PORT", "{{ .HTTPPort }}")
+	addr := getenv("HTTP_ADDR", "0.0.0.0:"+port)
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		return Config{}, fmt.Errorf("DATABASE_URL est requis")
+	}
+	if _, err := strconv.Atoi(port); err != nil {
+		return Config{}, fmt.Errorf("HTTP_PORT invalide : %w", err)
+	}
+	return Config{HTTPAddr: addr, DatabaseURL: dbURL}, nil
+}
+
+func getenv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}

@@ -1,0 +1,23 @@
+package domain
+
+import "time"
+
+// User représente un utilisateur métier.
+type User struct {
+	ID        int64
+	Email     string
+	Name      string
+	CreatedAt time.Time
+}
+
+// UserRepository définit le port sortant de persistance User.
+type UserRepository interface {
+	FindByEmail(email string) (*User, error)
+	Create(user User) (*User, error)
+}
+
+// HealthStatus représente l'état de santé du service.
+type HealthStatus struct {
+	Status  string
+	Service string
+}

@@ -1,0 +1,29 @@
+package health
+
+import (
+	"context"
+	"errors"
+	"testing"
+)
+
+type fakeDB struct{ err error }
+
+func (f fakeDB) Ping(_ context.Context) error { return f.err }
+
+func TestCheck_OK(t *testing.T) {
+	svc := NewService(fakeDB{})
+	got, err := svc.Check(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "ok" {
+		t.Fatalf("status = %q", got.Status)
+	}
+}
+
+func TestCheck_DBDown(t *testing.T) {
+	svc := NewService(fakeDB{err: errors.New("down")})
+	if _, err := svc.Check(context.Background()); err == nil {
+		t.Fatal("expected error")
+	}
+}

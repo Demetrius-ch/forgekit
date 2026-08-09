@@ -1,0 +1,35 @@
+package handler
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	apphealth "{{ .ModulePath }}/internal/application/health"
+)
+
+type fakeHealthDB struct{ err error }
+
+func (f fakeHealthDB) Ping(_ context.Context) error { return f.err }
+
+func TestHealth_OK(t *testing.T) {
+	h := NewHealth(slog.Default(), apphealth.NewService(fakeHealthDB{}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}
+
+func TestUser_Create_BadJSON(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader("not-json"))
+	h := NewUser(slog.Default(), nil)
+	h.Create(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d", rec.Code)
+	}
+}

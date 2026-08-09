@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: {{ .ProjectName }}-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: {{ .DatabaseName }}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d {{ .DatabaseName }}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    image: migrate/migrate:v4.18.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../migrations:/migrations
+    command:
+      [
+        "-path", "/migrations",
+        "-database", "postgres://postgres:postgres@postgres:5432/{{ .DatabaseName }}?sslmode=disable",
+        "up"
+      ]
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: {{ .ProjectName }}-api
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      HTTP_PORT: "{{ .HTTPPort }}"
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/{{ .DatabaseName }}?sslmode=disable
+    ports:
+      - "{{ .HTTPPort }}:{{ .HTTPPort }}"
+
+volumes:
+  postgres_data:

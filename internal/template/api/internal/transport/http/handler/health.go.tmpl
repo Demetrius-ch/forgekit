@@ -1,0 +1,38 @@
+package handler
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+
+	apphealth "{{ .ModulePath }}/internal/application/health"
+)
+
+type Health struct {
+	logger *slog.Logger
+	svc    *apphealth.Service
+}
+
+func NewHealth(logger *slog.Logger, svc *apphealth.Service) *Health {
+	return &Health{logger: logger, svc: svc}
+}
+
+func (h *Health) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	status, err := h.svc.Check(r.Context())
+	if err != nil {
+		h.logger.Error("health check failed", "error", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"status": "degraded", "service": "{{ .ProjectName }}",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": status.Status, "service": status.Service,
+	})
+}
+
+func writeJSON(w http.ResponseWriter, code int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(payload)
+}

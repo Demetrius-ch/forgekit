@@ -1,0 +1,46 @@
+package user
+
+import (
+	"testing"
+
+	"{{ .ModulePath }}/internal/domain"
+)
+
+type memRepo struct {
+	byEmail map[string]domain.User
+	nextID  int64
+}
+
+func (m *memRepo) FindByEmail(email string) (*domain.User, error) {
+	if u, ok := m.byEmail[email]; ok {
+		copy := u
+		return &copy, nil
+	}
+	return nil, nil
+}
+
+func (m *memRepo) Create(user domain.User) (*domain.User, error) {
+	m.nextID++
+	user.ID = m.nextID
+	m.byEmail[user.Email] = user
+	copy := user
+	return &copy, nil
+}
+
+func TestRegister_OK(t *testing.T) {
+	svc := NewService(&memRepo{byEmail: make(map[string]domain.User)})
+	u, err := svc.Register("dev@example.com", "Dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Email != "dev@example.com" {
+		t.Fatalf("email = %q", u.Email)
+	}
+}
+
+func TestRegister_InvalidEmail(t *testing.T) {
+	svc := NewService(&memRepo{byEmail: make(map[string]domain.User)})
+	if _, err := svc.Register("bad", "Dev"); err == nil {
+		t.Fatal("expected error")
+	}
+}

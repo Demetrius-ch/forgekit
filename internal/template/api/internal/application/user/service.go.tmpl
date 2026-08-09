@@ -1,0 +1,33 @@
+package user
+
+import (
+	"fmt"
+	"strings"
+
+	"{{ .ModulePath }}/internal/domain"
+)
+
+// Service contient la logique applicative User.
+type Service struct {
+	repo domain.UserRepository
+}
+
+func NewService(repo domain.UserRepository) *Service {
+	return &Service{repo: repo}
+}
+
+// Register crée un utilisateur après validation basique.
+func (s *Service) Register(email, name string) (*domain.User, error) {
+	email = strings.TrimSpace(strings.ToLower(email))
+	name = strings.TrimSpace(name)
+	if email == "" || !strings.Contains(email, "@") {
+		return nil, fmt.Errorf("email invalide")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("nom requis")
+	}
+	if existing, _ := s.repo.FindByEmail(email); existing != nil {
+		return nil, fmt.Errorf("email déjà utilisé")
+	}
+	return s.repo.Create(domain.User{Email: email, Name: name})
+}
