@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/forgekit/forgekit/internal/engine"
-	"github.com/forgekit/forgekit/internal/template"
+	"github.com/Demetrius-ch/forgekit/internal/engine"
+	"github.com/Demetrius-ch/forgekit/internal/template"
 )
 
 // Generator scaffolds projects from embedded templates.

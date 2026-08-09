@@ -2,8 +2,8 @@
 package generator
 
 import (
-	"github.com/forgekit/forgekit/internal/engine"
-	intgen "github.com/forgekit/forgekit/internal/generator"
+	"github.com/Demetrius-ch/forgekit/internal/engine"
+	intgen "github.com/Demetrius-ch/forgekit/internal/generator"
 )
 
 // Options configures project generation.

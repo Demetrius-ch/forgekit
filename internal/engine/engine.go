@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/forgekit/forgekit/internal/template"
+	"github.com/Demetrius-ch/forgekit/internal/template"
 )
 
 const (

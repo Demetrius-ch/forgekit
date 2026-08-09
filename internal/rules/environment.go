@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/forgekit/forgekit/internal/analyzer"
-	"github.com/forgekit/forgekit/internal/report"
+	"github.com/Demetrius-ch/forgekit/internal/analyzer"
+	"github.com/Demetrius-ch/forgekit/internal/report"
 )
 
 type GoVersionRule struct{}

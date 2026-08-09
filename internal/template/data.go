@@ -12,9 +12,9 @@ type Data struct {
 }
 
 // Aliases exposes {{PROJECT_NAME}} style access inside templates.
-func (d Data) PROJECT_NAME() string  { return d.ProjectName }
-func (d Data) MODULE_NAME() string   { return d.ModulePath }
-func (d Data) DATABASE() string      { return d.DatabaseName }
-func (d Data) AUTHOR() string        { return d.Author }
-func (d Data) HTTP_PORT() int        { return d.HTTPPort }
-func (d Data) GO_VERSION() string    { return d.GoVersion }
+func (d Data) PROJECT_NAME() string { return d.ProjectName }
+func (d Data) MODULE_NAME() string  { return d.ModulePath }
+func (d Data) DATABASE() string     { return d.DatabaseName }
+func (d Data) AUTHOR() string       { return d.Author }
+func (d Data) HTTP_PORT() int       { return d.HTTPPort }
+func (d Data) GO_VERSION() string   { return d.GoVersion }

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forgekit/forgekit/internal/generator"
+	"github.com/Demetrius-ch/forgekit/internal/generator"
 )
 
 func TestValidateProjectName(t *testing.T) {

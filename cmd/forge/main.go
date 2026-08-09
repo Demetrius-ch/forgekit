@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/forgekit/forgekit/internal/cli"
-	"github.com/forgekit/forgekit/internal/errs"
-	"github.com/forgekit/forgekit/internal/output"
+	"github.com/Demetrius-ch/forgekit/internal/cli"
+	"github.com/Demetrius-ch/forgekit/internal/errs"
+	"github.com/Demetrius-ch/forgekit/internal/output"
 )
 
 func main() {

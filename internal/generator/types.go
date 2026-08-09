@@ -1,6 +1,6 @@
 package generator
 
-import "github.com/forgekit/forgekit/internal/template"
+import "github.com/Demetrius-ch/forgekit/internal/template"
 
 // InitOptions holds parameters for project scaffolding.
 type InitOptions struct {

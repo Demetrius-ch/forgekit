@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/forgekit/forgekit/internal/template"
+import "github.com/Demetrius-ch/forgekit/internal/template"
 
 // Variables exposes template placeholders documented in ForgeKit specs.
 type Variables struct {

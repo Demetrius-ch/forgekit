@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/forgekit/forgekit/internal/config"
-	"github.com/forgekit/forgekit/internal/report"
+	"github.com/Demetrius-ch/forgekit/internal/config"
+	"github.com/Demetrius-ch/forgekit/internal/report"
 )
 
 var secretPatterns = []*regexp.Regexp{

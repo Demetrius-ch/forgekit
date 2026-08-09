@@ -3,7 +3,7 @@ package rules
 import (
 	"context"
 
-	"github.com/forgekit/forgekit/internal/report"
+	"github.com/Demetrius-ch/forgekit/internal/report"
 )
 
 // Context carries shared state for rule evaluation.

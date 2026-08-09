@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/forgekit/forgekit/internal/app"
+	"github.com/Demetrius-ch/forgekit/internal/app"
 	"github.com/spf13/cobra"
 )
 

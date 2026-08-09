@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/forgekit/forgekit/internal/app"
-	"github.com/forgekit/forgekit/internal/config"
-	"github.com/forgekit/forgekit/internal/generator"
-	"github.com/forgekit/forgekit/internal/output"
-	"github.com/forgekit/forgekit/internal/prompt"
-	"github.com/forgekit/forgekit/internal/report"
-	"github.com/forgekit/forgekit/internal/rules"
+	"github.com/Demetrius-ch/forgekit/internal/app"
+	"github.com/Demetrius-ch/forgekit/internal/config"
+	"github.com/Demetrius-ch/forgekit/internal/generator"
+	"github.com/Demetrius-ch/forgekit/internal/output"
+	"github.com/Demetrius-ch/forgekit/internal/prompt"
+	"github.com/Demetrius-ch/forgekit/internal/report"
+	"github.com/Demetrius-ch/forgekit/internal/rules"
 	"github.com/spf13/cobra"
 )
 

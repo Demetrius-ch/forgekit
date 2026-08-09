@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/forgekit/forgekit/internal/output"
+	"github.com/Demetrius-ch/forgekit/internal/output"
 	"github.com/spf13/cobra"
 )
 

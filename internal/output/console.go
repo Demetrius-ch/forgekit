@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/forgekit/forgekit/internal/engine"
-	"github.com/forgekit/forgekit/internal/report"
+	"github.com/Demetrius-ch/forgekit/internal/engine"
+	"github.com/Demetrius-ch/forgekit/internal/report"
 )
 
 // Format selects human or JSON rendering.

@@ -13,7 +13,7 @@ const FileName = "forge.yaml"
 // Config holds ForgeKit project settings.
 type Config struct {
 	Architecture ArchitectureConfig `yaml:"architecture"`
-	Project      ProjectConfig        `yaml:"project"`
+	Project      ProjectConfig      `yaml:"project"`
 }
 
 type ProjectConfig struct {

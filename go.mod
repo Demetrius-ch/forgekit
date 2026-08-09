@@ -1,4 +1,4 @@
-module github.com/forgekit/forgekit
+module github.com/Demetrius-ch/forgekit
 
 go 1.22
 
