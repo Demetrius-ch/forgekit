@@ -62,31 +62,51 @@ func (GitRule) Run(_ context.Context, _ Context) ([]report.Finding, error) {
 
 type DockerRule struct{}
 
-func (DockerRule) ID() string          { return "env.docker" }
+func (DockerRule) ID() string          { return "docker.status" }
 func (DockerRule) Name() string        { return "Docker" }
-func (DockerRule) Description() string { return "Vérifie le daemon Docker" }
-func (DockerRule) Category() string    { return "environment" }
+func (DockerRule) Description() string { return "Vérifie la configuration Docker du projet" }
+func (DockerRule) Category() string    { return "docker" }
 func (DockerRule) Severity() report.Severity {
 	return report.SeverityWarning
 }
 
-func (DockerRule) Run(_ context.Context, _ Context) ([]report.Finding, error) {
+func (DockerRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	if !hasDockerConfig(rctx.ProjectRoot) {
+		return []report.Finding{{
+			ID: "docker.project.missing", Category: "docker", Severity: report.SeverityWarning,
+			Message:    "Aucun fichier Docker détecté dans le projet",
+			Suggestion: "Ajoutez un Dockerfile ou docker/docker-compose.yml si vous souhaitez containeriser le projet",
+		}}, nil
+	}
+
 	if _, err := exec.LookPath("docker"); err != nil {
 		return []report.Finding{{
-			ID: "env.docker", Category: "environment", Severity: report.SeverityWarning,
-			Message: "Docker CLI introuvable", Suggestion: "Installez Docker pour le développement local",
+			ID: "docker.cli.missing", Category: "docker", Severity: report.SeverityWarning,
+			Message:    "Docker CLI introuvable",
+			Suggestion: "Installez Docker pour exécuter les images locales",
 		}}, nil
 	}
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		return []report.Finding{{
-			ID: "env.docker", Category: "environment", Severity: report.SeverityWarning,
-			Message: "Docker est installé mais le daemon ne répond pas", Suggestion: "Démarrez Docker Desktop ou le service docker",
+			ID: "docker.daemon.stopped", Category: "docker", Severity: report.SeverityWarning,
+			Message:    "Docker est configuré mais le daemon ne répond pas",
+			Suggestion: "Démarrez le service Docker ou Docker Desktop",
 		}}, nil
 	}
 	return []report.Finding{{
-		ID: "env.docker", Category: "pass", Severity: report.SeverityInfo,
-		Message: "Docker daemon accessible",
+		ID: "docker.ready", Category: "docker", Severity: report.SeverityInfo,
+		Message: "Docker configuré et daemon accessible",
 	}}, nil
+}
+
+func hasDockerConfig(root string) bool {
+	if _, err := os.Stat(filepath.Join(root, "Dockerfile")); err == nil {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(root, "docker", "docker-compose.yml")); err == nil {
+		return true
+	}
+	return false
 }
 
 type GoModRule struct{}
@@ -132,19 +152,38 @@ func (EnvFileRule) Severity() report.Severity {
 func (EnvFileRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
 	example := filepath.Join(rctx.ProjectRoot, ".env.example")
 	env := filepath.Join(rctx.ProjectRoot, ".env")
+	if _, err := os.Stat(example); err != nil {
+		if os.IsNotExist(err) {
+			return []report.Finding{{
+				ID: "project.env.example.missing", Category: "project", Severity: report.SeverityWarning,
+				Message:    ".env.example absent",
+				Suggestion: "Ajoutez un fichier .env.example pour documenter les variables d'environnement",
+			}}, nil
+		}
+		return nil, err
+	}
+
 	exKeys, err := parseEnvKeys(example)
 	if err != nil {
 		return nil, err
 	}
 	if len(exKeys) == 0 {
-		return nil, nil
+		return []report.Finding{{
+			ID: "project.env.example.empty", Category: "project", Severity: report.SeverityWarning,
+			Message:    ".env.example vide",
+			Suggestion: "Remplissez .env.example avec les variables nécessaires",
+		}}, nil
 	}
 	envKeys, err := parseEnvKeys(env)
 	if err != nil {
-		return []report.Finding{{
-			ID: "project.env", Category: "project", Severity: report.SeverityWarning,
-			Message: ".env manquant", Suggestion: "cp .env.example .env",
-		}}, nil
+		if os.IsNotExist(err) {
+			return []report.Finding{{
+				ID: "project.env", Category: "project", Severity: report.SeverityWarning,
+				Message:    ".env manquant",
+				Suggestion: "cp .env.example .env",
+			}}, nil
+		}
+		return nil, err
 	}
 	var missing []string
 	for k := range exKeys {

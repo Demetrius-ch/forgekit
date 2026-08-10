@@ -86,8 +86,10 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 		return plan, err
 	}
 
-	if err := g.PostProcessProject(opts.TargetDir); err != nil {
-		return plan, err
+	if !opts.SkipPostprocess {
+		if err := g.PostProcessProject(opts.TargetDir); err != nil {
+			return plan, err
+		}
 	}
 
 	return plan, nil

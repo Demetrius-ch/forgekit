@@ -8,13 +8,14 @@ import (
 
 // Options configures project generation.
 type Options struct {
-	ProjectName  string
-	ModulePath   string
-	HTTPPort     int
-	DatabaseName string
-	TargetDir    string
-	Author       string
-	DryRun       bool
+	ProjectName     string
+	ModulePath      string
+	HTTPPort        int
+	DatabaseName    string
+	TargetDir       string
+	Author          string
+	DryRun          bool
+	SkipPostprocess bool
 }
 
 // PlanEntry describes a planned filesystem operation.
@@ -27,13 +28,14 @@ func Generate(opts Options) ([]PlanEntry, error) {
 		return nil, err
 	}
 	return g.Init(intgen.InitOptions{
-		ProjectName:  opts.ProjectName,
-		ModulePath:   opts.ModulePath,
-		HTTPPort:     opts.HTTPPort,
-		DatabaseName: opts.DatabaseName,
-		TargetDir:    opts.TargetDir,
-		Author:       opts.Author,
-		DryRun:       opts.DryRun,
+		ProjectName:     opts.ProjectName,
+		ModulePath:      opts.ModulePath,
+		HTTPPort:        opts.HTTPPort,
+		DatabaseName:    opts.DatabaseName,
+		TargetDir:       opts.TargetDir,
+		Author:          opts.Author,
+		DryRun:          opts.DryRun,
+		SkipPostprocess: opts.SkipPostprocess,
 	})
 }
 

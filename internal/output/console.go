@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Demetrius-ch/forgekit/internal/engine"
 	"github.com/Demetrius-ch/forgekit/internal/report"
@@ -51,6 +53,107 @@ func (c *Console) PrintResult(res report.Result) error {
 }
 
 func (c *Console) printHuman(res report.Result) error {
+	// Special pretty rendering for analyze command.
+	if res.Command == "analyze" {
+		// Header
+		fmt.Fprintln(c.Out, "ForgeKit Analyze")
+		fmt.Fprintln(c.Out, strings.Repeat("─", 40))
+		fmt.Fprintln(c.Out)
+
+		// Short list of findings summary
+		fmt.Fprintln(c.Out, "Résumé des vérifications :")
+		for _, f := range res.Findings {
+			marker := "✓"
+			if f.Severity == report.SeverityWarning {
+				marker = "⚠"
+			} else if f.Severity == report.SeverityError || f.Severity == report.SeverityCritical {
+				marker = "✗"
+			}
+			fmt.Fprintf(c.Out, "%s %s\n", marker, f.Message)
+		}
+
+		// Compute scores and render bars
+		score := report.ComputeScore(res)
+
+		// Project/module info
+		module := ""
+		if res.Project != "" {
+			if data, err := os.ReadFile(filepath.Join(res.Project, "go.mod")); err == nil {
+				lines := strings.Split(string(data), "\n")
+				if len(lines) > 0 {
+					for _, ln := range lines {
+						ln = strings.TrimSpace(ln)
+						if strings.HasPrefix(ln, "module ") {
+							module = strings.TrimSpace(strings.TrimPrefix(ln, "module"))
+							break
+						}
+					}
+				}
+			}
+		}
+		fmt.Fprintf(c.Out, "\nProjet : %s\n", res.Project)
+		if module != "" {
+			fmt.Fprintf(c.Out, "Module  : %s\n", module)
+		}
+
+		// render each category
+		bar := func(n int) string {
+			total := 40
+			filled := (n * total) / 100
+			if filled > total {
+				filled = total
+			}
+			if filled < 0 {
+				filled = 0
+			}
+			return strings.Repeat("█", filled) + strings.Repeat("░", total-filled)
+		}
+
+		fmt.Fprintln(c.Out)
+		for _, cat := range []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"} {
+			val := score.Categories[cat]
+			barStr := bar(val)
+			if c.Color {
+				// color by thresholds
+				if val >= 80 {
+					barStr = "\033[32m" + barStr + "\033[0m"
+				} else if val >= 50 {
+					barStr = "\033[33m" + barStr + "\033[0m"
+				} else {
+					barStr = "\033[31m" + barStr + "\033[0m"
+				}
+				cat = "\033[36m" + cat + "\033[0m"
+			}
+			fmt.Fprintf(c.Out, "%s\n%s %3d/100\n\n", cat, barStr, val)
+		}
+
+		// Global score and recommendations
+		fmt.Fprintln(c.Out, strings.Repeat("─", 40))
+		fmt.Fprintf(c.Out, "Score global : %d/100\n\n", score.Global)
+		if len(score.Notes) > 0 {
+			fmt.Fprintln(c.Out, "Recommandations :")
+			for _, n := range score.Notes {
+				fmt.Fprintf(c.Out, "⚠ %s\n", n)
+			}
+			fmt.Fprintln(c.Out)
+		}
+
+		// duration since Timestamp (Timestamp set at analysis start)
+		if !c.Quiet {
+			if !res.Timestamp.IsZero() {
+				dur := time.Since(res.Timestamp)
+				if dur < time.Second {
+					fmt.Fprintf(c.Out, "Analyse terminée en %dms\n", dur.Milliseconds())
+				} else {
+					fmt.Fprintf(c.Out, "Analyse terminée en %.2fs\n", dur.Seconds())
+				}
+			}
+		}
+
+		return nil
+	}
+
+	// default behavior for other commands
 	for _, f := range res.Findings {
 		label := f.Severity.LegacySeverity()
 		if f.Category == "pass" {

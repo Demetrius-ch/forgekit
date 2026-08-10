@@ -11,6 +11,8 @@ type InitOptions struct {
 	TargetDir    string
 	Author       string
 	DryRun       bool
+	// SkipPostprocess when true avoids running gofmt/go test on generated project.
+	SkipPostprocess bool
 }
 
 // TemplateData is passed to text/template when rendering files.

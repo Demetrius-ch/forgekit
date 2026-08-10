@@ -1,6 +1,9 @@
 package report
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Severity levels shared by doctor, analyze and check.
 type Severity string
@@ -82,6 +85,21 @@ func BuildSummary(findings []Finding) Summary {
 		}
 	}
 	return s
+}
+
+// UniqueFindings removes duplicate findings while preserving order.
+func UniqueFindings(findings []Finding) []Finding {
+	seen := make(map[string]struct{})
+	out := make([]Finding, 0, len(findings))
+	for _, f := range findings {
+		key := fmt.Sprintf("%s|%s|%s|%s", f.ID, f.Category, f.File, f.Message)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, f)
+	}
+	return out
 }
 
 // HasFailures returns true when errors or critical findings exist.

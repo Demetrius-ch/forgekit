@@ -20,13 +20,14 @@ import (
 
 func newInitCommand(g *globalFlags) *cobra.Command {
 	var (
-		modulePath     string
-		httpPort       int
-		databaseName   string
-		author         string
-		nonInteractive bool
-		targetDir      string
-		dryRun         bool
+		modulePath      string
+		httpPort        int
+		databaseName    string
+		author          string
+		nonInteractive  bool
+		targetDir       string
+		dryRun          bool
+		skipPostprocess bool
 	)
 
 	cmd := &cobra.Command{
@@ -53,11 +54,12 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 			}
 
 			opts := generator.InitOptions{
-				ProjectName: projectName,
-				TargetDir:   absDir,
-				HTTPPort:    httpPort,
-				DryRun:      dryRun,
-				Author:      config.ResolveAuthor(author, absDir),
+				ProjectName:     projectName,
+				TargetDir:       absDir,
+				HTTPPort:        httpPort,
+				DryRun:          dryRun,
+				Author:          config.ResolveAuthor(author, absDir),
+				SkipPostprocess: skipPostprocess,
 			}
 
 			if nonInteractive || dryRun {
@@ -133,6 +135,7 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 	cmd.Flags().StringVar(&targetDir, "dir", "", "Répertoire cible")
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Sans prompts interactifs")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Afficher le plan sans écrire sur le disque")
+	cmd.Flags().BoolVar(&skipPostprocess, "skip-postprocess", false, "Ne pas exécuter gofmt et go test après génération")
 	return cmd
 }
 
@@ -164,9 +167,122 @@ func newAnalyzeCommand(g *globalFlags) *cobra.Command {
 				return err
 			}
 			loader := rules.StaticConfigLoader{Rules: cfg.Architecture.Rules}
-			return runReport(g, "analyze", root, rules.AnalyzeRules(loader))
+			return runAnalyze(g, root, loader)
 		},
 	}
+}
+
+// runAnalyze runs category-by-category analysis with per-step spinner and aggregates findings.
+func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader) error {
+	console := g.console()
+
+	categories := []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"}
+	var allFindings []report.Finding
+	start := time.Now()
+
+	for _, cat := range categories {
+		// spinner per category (human only)
+		var spinner *output.Spinner
+		if g.Format == output.FormatHuman && !g.Quiet {
+			spinner = output.NewSpinner(console.Out)
+			spinner.Start("Analyse " + cat + "...")
+		}
+
+		var findings []report.Finding
+		var err error
+
+		switch cat {
+		case "Architecture":
+			reg := rules.NewRegistry(rules.ArchitectureRule{Rules: loader.ArchitectureRules()})
+			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+		case "Security":
+			reg := rules.NewRegistry(rules.SecuritySecretsRule{}, rules.SecurityCORSRule{})
+			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+		case "Configuration":
+			reg := rules.NewRegistry(rules.GoModRule{}, rules.EnvFileRule{})
+			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+		case "Docker":
+			reg := rules.NewRegistry(rules.DockerRule{})
+			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+		case "Tests":
+			// lightweight test detection: presence of _test.go files
+			findings, err = detectTests(root)
+		case "Documentation":
+			findings, err = detectDocs(root)
+		default:
+			findings = nil
+		}
+
+		if spinner != nil {
+			// compute category score using all accumulated findings so far, plus current category.
+			temp := report.Result{Project: root, Findings: append(append([]report.Finding(nil), allFindings...), findings...)}
+			score := report.ComputeScore(temp)
+			s := score.Categories[cat]
+			// final message
+			var final string
+			if err != nil {
+				final = "✗ " + cat + " — erreur"
+			} else if s >= 60 {
+				final = "✓ " + cat + " — " + fmt.Sprintf("%d/100", s)
+			} else {
+				final = "✗ " + cat + " — " + fmt.Sprintf("%d/100", s)
+			}
+			spinner.Stop(final)
+		}
+
+		if err != nil {
+			output.Debug(os.Stderr, g.Debug, err)
+			return err
+		}
+		allFindings = append(allFindings, findings...)
+	}
+
+	// aggregate and print result
+	allFindings = report.UniqueFindings(allFindings)
+	res := report.Result{Tool: app.Name, Version: app.Version, Command: "analyze", Project: root, Timestamp: start, Findings: allFindings}
+	res.Summary = report.BuildSummary(allFindings)
+	if err := console.PrintResult(res); err != nil {
+		return err
+	}
+	if report.HasFailures(res.Summary) {
+		return fmt.Errorf("diagnostics en échec : %d error(s)", res.Summary.Error+res.Summary.Critical)
+	}
+	return nil
+}
+
+// detectTests returns findings about tests presence.
+func detectTests(root string) ([]report.Finding, error) {
+	hasTests := false
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(d.Name(), "_test.go") {
+			hasTests = true
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if hasTests {
+		return []report.Finding{{ID: "tests.present", Category: "tests", Severity: report.SeverityInfo, Message: "Tests détectés"}}, nil
+	}
+	return []report.Finding{{ID: "tests.missing", Category: "tests", Severity: report.SeverityWarning, Message: "Aucun test détecté"}}, nil
+}
+
+// detectDocs checks README.md and .env.example
+func detectDocs(root string) ([]report.Finding, error) {
+	msgs := []report.Finding{}
+	if _, err := os.Stat(filepath.Join(root, "README.md")); err == nil {
+		msgs = append(msgs, report.Finding{ID: "docs.readme", Category: "documentation", Severity: report.SeverityInfo, Message: "README.md présent"})
+	} else {
+		msgs = append(msgs, report.Finding{ID: "docs.readme.missing", Category: "documentation", Severity: report.SeverityWarning, Message: "README.md absent"})
+	}
+	if _, err := os.Stat(filepath.Join(root, ".env.example")); err == nil {
+		msgs = append(msgs, report.Finding{ID: "docs.env", Category: "documentation", Severity: report.SeverityInfo, Message: ".env.example présent"})
+	} else {
+		msgs = append(msgs, report.Finding{ID: "docs.env.missing", Category: "documentation", Severity: report.SeverityWarning, Message: ".env.example absent"})
+	}
+	return msgs, nil
 }
 
 func newCheckCommand(g *globalFlags) *cobra.Command {
@@ -193,17 +309,31 @@ func newCheckCommand(g *globalFlags) *cobra.Command {
 }
 
 func runReport(g *globalFlags, command, root string, reg *rules.Registry) error {
+	console := g.console()
+	var spinner *output.Spinner
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Analyse du projet...")
+	}
+
+	start := time.Now()
 	findings, err := reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+	if spinner != nil {
+		if err != nil {
+			spinner.Stop("✗ Analyse interrompue")
+		} else {
+			spinner.Stop("✓ Analyse terminée")
+		}
+	}
 	if err != nil {
 		output.Debug(os.Stderr, g.Debug, err)
 		return err
 	}
 	res := report.Result{
 		Tool: app.Name, Version: app.Version, Command: command,
-		Project: root, Timestamp: time.Now(), Findings: findings,
+		Project: root, Timestamp: start, Findings: findings,
 	}
 	res.Summary = report.BuildSummary(findings)
-	console := g.console()
 	if err := console.PrintResult(res); err != nil {
 		return err
 	}
