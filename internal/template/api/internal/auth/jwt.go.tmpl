@@ -1,0 +1,88 @@
+package auth
+
+import (
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+// ErrInvalidToken is returned when token validation fails.
+var ErrInvalidToken = errors.New("token invalide ou expiré")
+
+// Claims represents the JWT claims.
+type Claims struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	jwt.RegisteredClaims
+}
+
+// JWTManager handles JWT token generation and validation.
+type JWTManager struct {
+	secretKey []byte
+	issuer    string
+}
+
+// NewJWTManager creates a new JWT manager.
+func NewJWTManager(secretKey, issuer string) *JWTManager {
+	return &JWTManager{
+		secretKey: []byte(secretKey),
+		issuer:    issuer,
+	}
+}
+
+// Generate creates a new JWT token for the given user.
+func (m *JWTManager) Generate(userID, email string, duration time.Duration) (string, error) {
+	claims := Claims{
+		UserID: userID,
+		Email:  email,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    m.issuer,
+			Subject:   userID,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(m.secretKey)
+}
+
+// Validate parses and validates a JWT token.
+func (m *JWTManager) Validate(tokenString string) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidToken
+		}
+		return m.secretKey, nil
+	})
+
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	return claims, nil
+}
+
+// ExtractBearerToken extracts the token from Authorization header.
+func ExtractBearerToken(authHeader string) (string, error) {
+	if authHeader == "" {
+		return "", ErrInvalidToken
+	}
+
+	const prefix = "Bearer "
+	if !strings.HasPrefix(authHeader, prefix) {
+		return "", ErrInvalidToken
+	}
+
+	return strings.TrimPrefix(authHeader, prefix), nil
+}
+
+

@@ -52,6 +52,18 @@ func (c *Console) PrintResult(res report.Result) error {
 	return c.printHuman(res)
 }
 
+// PrintJSON renders a value as formatted JSON.
+func (c *Console) PrintJSON(value any) error {
+	if c.Format != FormatJSON {
+		return fmt.Errorf("PrintJSON nécessite le format JSON")
+	}
+
+	enc := json.NewEncoder(c.Out)
+	enc.SetIndent("", "  ")
+
+	return enc.Encode(value)
+}
+
 func (c *Console) printHuman(res report.Result) error {
 	// Special pretty rendering for analyze command.
 	if res.Command == "analyze" {

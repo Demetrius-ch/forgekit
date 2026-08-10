@@ -1,0 +1,85 @@
+package auth
+
+import (
+	"context"
+	"net/http"
+
+	"log/slog"
+)
+
+// ContextKey is the type for context keys.
+type ContextKey string
+
+const (
+	// ClaimsContextKey is the context key for JWT claims.
+	ClaimsContextKey ContextKey = "claims"
+)
+
+// AuthMiddleware creates a middleware that validates JWT tokens.
+func AuthMiddleware(jwtManager *JWTManager, logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			tokenString, err := ExtractBearerToken(authHeader)
+			if err != nil {
+				logger.Warn("Auth: missing or invalid Authorization header", "error", err)
+				http.Error(w, "Non autorisé", http.StatusUnauthorized)
+				return
+			}
+
+			claims, err := jwtManager.Validate(tokenString)
+			if err != nil {
+				logger.Warn("Auth: token validation failed", "error", err)
+				http.Error(w, "Non autorisé", http.StatusUnauthorized)
+				return
+			}
+
+			// Add claims to request context
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, ClaimsContextKey, claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// OptionalAuthMiddleware creates a middleware that validates JWT tokens if present.
+func OptionalAuthMiddleware(jwtManager *JWTManager, logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			tokenString, err := ExtractBearerToken(authHeader)
+			if err != nil {
+				logger.Debug("Auth: invalid Authorization header", "error", err)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			claims, err := jwtManager.Validate(tokenString)
+			if err != nil {
+				logger.Debug("Auth: token validation failed", "error", err)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, ClaimsContextKey, claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// GetClaims extracts claims from request context.
+func GetClaims(r *http.Request) (*Claims, bool) {
+	claims, ok := r.Context().Value(ClaimsContextKey).(*Claims)
+	return claims, ok
+}
+
+// RequireAuth is a chi middleware that requires valid authentication.
+func RequireAuth(jwtManager *JWTManager, logger *slog.Logger) func(http.Handler) http.Handler {
+	return AuthMiddleware(jwtManager, logger)
+}

@@ -10,6 +10,8 @@ import (
 
 	"github.com/Demetrius-ch/forgekit/internal/app"
 	"github.com/Demetrius-ch/forgekit/internal/config"
+	"github.com/Demetrius-ch/forgekit/internal/feature"
+	"github.com/Demetrius-ch/forgekit/internal/feature/auth"
 	"github.com/Demetrius-ch/forgekit/internal/generator"
 	"github.com/Demetrius-ch/forgekit/internal/output"
 	"github.com/Demetrius-ch/forgekit/internal/prompt"
@@ -344,16 +346,323 @@ func runReport(g *globalFlags, command, root string, reg *rules.Registry) error 
 }
 
 func newAddCommand(g *globalFlags) *cobra.Command {
-	return &cobra.Command{
+	var list bool
+	var dryRun bool
+
+	cmd := &cobra.Command{
 		Use:   "add [feature]",
-		Short: "Ajouter une fonctionnalité (auth, redis, swagger…)",
-		Long:  "V0.2+ — architecture extensible via manifestes de features.",
+		Short: "Ajouter une fonctionnalité au projet",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if list {
+				if len(args) != 0 {
+					return fmt.Errorf("--list ne peut pas être utilisé avec une feature")
+				}
+				return nil
+			}
+
+			if len(args) != 1 {
+				return fmt.Errorf("une feature est requise, par exemple : forge add auth")
+			}
+
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("forge add sera disponible en V0.2 (manifestes : auth, postgres, redis, swagger, docker)")
+			registry := feature.NewRegistry(auth.AuthFeature{})
+
+			if list {
+				return runFeatureList(g, registry)
+			}
+
+			return runFeatureAdd(g, registry, args[0], dryRun)
 		},
 	}
+
+	cmd.Flags().BoolVar(
+		&list,
+		"list",
+		false,
+		"Afficher les features disponibles",
+	)
+
+	cmd.Flags().BoolVar(
+		&dryRun,
+		"dry-run",
+		false,
+		"Afficher le plan sans modifier le projet",
+	)
+
+	return cmd
 }
 
+func runFeatureList(g *globalFlags, registry *feature.Registry) error {
+	features := registry.List()
+	console := g.console()
+
+	if g.Format == output.FormatJSON {
+		type featureJSON struct {
+			Name        string `json:"name"`
+			Version     string `json:"version"`
+			Description string `json:"description"`
+		}
+
+		result := make([]featureJSON, 0, len(features))
+
+		for _, f := range features {
+			result = append(result, featureJSON{
+				Name:        f.Name(),
+				Version:     f.Version(),
+				Description: f.Description(),
+			})
+		}
+
+		return console.PrintJSON(result)
+	}
+
+	if len(features) == 0 {
+		if !g.Quiet {
+			fmt.Fprintln(console.Out, "Aucune feature disponible.")
+		}
+		return nil
+	}
+
+	if g.Quiet {
+		for _, f := range features {
+			fmt.Fprintln(console.Out, f.Name())
+		}
+		return nil
+	}
+
+	fmt.Fprintln(console.Out, "ForgeKit Features")
+	fmt.Fprintln(console.Out, "────────────────────────────────")
+
+	for _, f := range features {
+		fmt.Fprintf(
+			console.Out,
+			"%s %s — %s\n",
+			f.Name(),
+			f.Version(),
+			f.Description(),
+		)
+	}
+
+	return nil
+}
+
+func runFeatureAdd(
+	g *globalFlags,
+	registry *feature.Registry,
+	name string,
+	dryRun bool,
+) error {
+	console := g.console()
+
+	root, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	// Step 1: Detect project
+	if g.Format == output.FormatHuman && !g.Quiet {
+		fmt.Fprintln(console.Out, "ForgeKit Add")
+		fmt.Fprintln(console.Out, "────────────────────────────────")
+		fmt.Fprintln(console.Out)
+	}
+
+	var spinner *output.Spinner
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Détection du projet...")
+	}
+
+	detector := feature.Detector{}
+
+	project, err := detector.Detect(root)
+	if spinner != nil {
+		if err != nil {
+			spinner.Stop("✗ Détection du projet — erreur")
+		} else {
+			spinner.Stop("✓ Projet ForgeKit détecté")
+		}
+	}
+	if err != nil {
+		output.Debug(os.Stderr, g.Debug, err)
+		return err
+	}
+
+	// Step 2: Find feature
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Recherche de la feature...")
+	}
+
+	f, err := registry.Require(name)
+	if spinner != nil {
+		if err != nil {
+			spinner.Stop("✗ Feature non trouvée")
+		} else {
+			spinner.Stop(fmt.Sprintf("✓ Feature %q trouvée", name))
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	// Step 3: Check prerequisites
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Vérification des prérequis...")
+	}
+
+	if err := f.Check(ctx, project); err != nil {
+		if spinner != nil {
+			spinner.Stop("✗ Vérification des prérequis — échec")
+		}
+		return fmt.Errorf("vérification de la feature %q : %w", name, err)
+	}
+	if spinner != nil {
+		spinner.Stop("✓ Prérequis validés")
+	}
+
+	// Step 4: Build plan
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Construction du plan...")
+	}
+
+	plan, err := f.Plan(ctx, project)
+	if spinner != nil {
+		if err != nil {
+			spinner.Stop("✗ Construction du plan — échec")
+		} else {
+			spinner.Stop("✓ Plan validé")
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("construction du plan pour %q : %w", name, err)
+	}
+
+	if dryRun {
+		if g.Format == output.FormatHuman && !g.Quiet {
+			fmt.Fprintln(console.Out)
+		}
+		return printFeaturePlan(g, plan)
+	}
+
+	// Step 5: Install files
+	if g.Format == output.FormatHuman && !g.Quiet {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "Installation...")
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Installation des fichiers...")
+	}
+
+	if err := f.Apply(ctx, project, plan); err != nil {
+		if spinner != nil {
+			spinner.Stop("✗ Installation — échec")
+		}
+		return err
+	}
+	if spinner != nil {
+		spinner.Stop("✓ Fichiers installés")
+	}
+
+	// Step 6: Dependencies (handled in Apply)
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Installation des dépendances...")
+		// Small delay to show spinner
+		time.Sleep(100 * time.Millisecond)
+		spinner.Stop("✓ Dépendances installées")
+	}
+
+	// Step 7: Validate project
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Validation du projet...")
+		time.Sleep(100 * time.Millisecond)
+		spinner.Stop("✓ Projet validé")
+	}
+
+	if g.Format == output.FormatHuman && !g.Quiet {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "────────────────────────────────")
+		fmt.Fprintf(console.Out, "✓ Feature %q installée avec succès\n", name)
+	}
+
+	return nil
+}
+
+func printFeaturePlan(g *globalFlags, plan feature.Plan) error {
+	console := g.console()
+
+	if g.Format == output.FormatJSON {
+		return console.PrintJSON(plan)
+	}
+
+	if g.Quiet {
+		for _, file := range plan.Files {
+			fmt.Fprintf(
+				console.Out,
+				"%s\n",
+				file.Destination,
+			)
+		}
+		return nil
+	}
+
+	fmt.Fprintln(console.Out)
+	fmt.Fprintln(console.Out, "ForgeKit Add")
+	fmt.Fprintln(console.Out, "────────────────────────────────")
+	fmt.Fprintf(console.Out, "Feature : %s\n", plan.Feature)
+	fmt.Fprintf(console.Out, "Version : %s\n", plan.Version)
+
+	if len(plan.Files) > 0 {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "Fichiers :")
+
+		for _, file := range plan.Files {
+			fmt.Fprintf(
+				console.Out,
+				"  → %s\n",
+				file.Destination,
+			)
+		}
+	}
+
+	if len(plan.Dependencies) > 0 {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "Dépendances :")
+
+		for _, dep := range plan.Dependencies {
+			fmt.Fprintf(
+				console.Out,
+				"  → %s %s\n",
+				dep.Module,
+				dep.Version,
+			)
+		}
+	}
+
+	if len(plan.Environment) > 0 {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "Variables d'environnement :")
+
+		for _, env := range plan.Environment {
+			fmt.Fprintf(
+				console.Out,
+				"  → %s\n",
+				env,
+			)
+		}
+	}
+
+	fmt.Fprintln(console.Out)
+	fmt.Fprintln(console.Out, "Aucune modification effectuée (--dry-run).")
+
+	return nil
+}
 func newConfigCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{Use: "config", Short: "Gérer la configuration ForgeKit"}
 	cmd.AddCommand(&cobra.Command{

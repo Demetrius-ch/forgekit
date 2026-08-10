@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -167,5 +168,89 @@ func TestAnalyzeOptionalResourcesMissingWarnsButDoesNotFail(t *testing.T) {
 	}
 	if !strings.Contains(outputStr, "README.md absent") || !strings.Contains(outputStr, ".env.example absent") {
 		t.Fatalf("expected warnings for missing optional docs, got output:\n%s", outputStr)
+	}
+}
+
+func captureRootOutput(args []string) string {
+	root := NewRootCommand()
+	r, w, _ := os.Pipe()
+	oldStdout := os.Stdout
+	os.Stdout = w
+	root.SetArgs(args)
+	_ = root.Execute()
+	_ = w.Close()
+	os.Stdout = oldStdout
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	return buf.String()
+}
+
+func TestRootCommandShowsBranding(t *testing.T) {
+	out := captureRootOutput([]string{"--help"})
+
+	if !strings.Contains(out, "ForgeKit") {
+		t.Fatalf("expected branding 'ForgeKit' in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Build • Extend • Ship") {
+		t.Fatalf("expected slogan in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "███████") {
+		t.Fatalf("expected ASCII logo in output, got:\n%s", out)
+	}
+}
+
+func TestRootCommandNoArgsShowsBranding(t *testing.T) {
+	out := captureRootOutput([]string{})
+
+	if !strings.Contains(out, "ForgeKit") {
+		t.Fatalf("expected branding 'ForgeKit' in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Build • Extend • Ship") {
+		t.Fatalf("expected slogan in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "███████") {
+		t.Fatalf("expected ASCII logo in output, got:\n%s", out)
+	}
+}
+
+func TestRootCommandNoBrandingInJSON(t *testing.T) {
+	out := captureRootOutput([]string{"--help", "--format=json"})
+
+	// Check for actual branding elements (ASCII logo, slogan), not just the word "ForgeKit"
+	if strings.Contains(out, "███████") || strings.Contains(out, "Build • Extend • Ship") {
+		t.Fatalf("expected no branding in JSON output, got:\n%s", out)
+	}
+	// Should still be valid help text
+	if !strings.Contains(out, "Available Commands") {
+		t.Fatalf("expected help content in JSON mode, got:\n%s", out)
+	}
+}
+
+func TestRootCommandNoBrandingInQuiet(t *testing.T) {
+	out := captureRootOutput([]string{"--help", "--quiet"})
+
+	// Check for actual branding elements (ASCII logo, slogan), not just the word "ForgeKit"
+	if strings.Contains(out, "███████") || strings.Contains(out, "Build • Extend • Ship") {
+		t.Fatalf("expected no branding in quiet output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Available Commands") {
+		t.Fatalf("expected help content in quiet mode, got:\n%s", out)
+	}
+}
+
+func TestSubcommandHelpNoBranding(t *testing.T) {
+	root := NewRootCommand()
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"init", "--help"})
+	_ = root.Execute()
+	out := buf.String()
+
+	if strings.Contains(out, "ForgeKit") || strings.Contains(out, "Build • Extend • Ship") || strings.Contains(out, "███████") {
+		t.Fatalf("expected no branding in subcommand help, got:\n%s", out)
+	}
+	if !strings.Contains(out, "forge init") {
+		t.Fatalf("expected subcommand usage in output, got:\n%s", out)
 	}
 }

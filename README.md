@@ -1,6 +1,22 @@
 # ForgeKit
 
-> Generate production-ready Go REST APIs with a clean hexagonal architecture.
+<p align="center">
+  <img src="assets/logo/forgekit-logo.png" alt="ForgeKit" width="520">
+</p>
+
+<h1 align="center">ForgeKit</h1>
+
+<p align="center">
+  <strong>Go Backend Generator</strong>
+</p>
+
+<p align="center">
+  Build • Extend • Ship
+</p>
+
+<p align="center">
+  Generate production-ready Go REST APIs with a clean hexagonal architecture.
+</p>
 
 ForgeKit is a developer CLI written in Go that helps you bootstrap backend REST APIs without manually creating the same project structure, configuration, database integration, Docker files, migrations, and tests every time.
 
@@ -23,22 +39,24 @@ and get a structured Go backend ready for development.
 - Database migrations
 - Environment configuration
 - Automatic tests
--  Automatic Go formatting
--  Architecture validation
--  Development environment diagnostics
--  Project analysis
--  Human-readable or JSON output
--  Extensible CLI architecture
+- Automatic Go formatting
+- Architecture validation
+- Development environment diagnostics
+- Project analysis
+- Human-readable or JSON output
+- Extensible CLI architecture
+- **Feature system (`forge add`) for extending generated projects**
+- **JWT authentication infrastructure (`forge add auth`)**
 
 ---
 
-##  Installation
+## Installation
 
 ### From source
 
 Requirements:
 
-- Go 1.25+
+- Go 1.22+
 - Git
 - Docker (required for the generated project's Docker workflow)
 
@@ -69,7 +87,7 @@ forge version
 
 ---
 
-##  Usage
+## Usage
 
 ### Initialize a project
 
@@ -103,7 +121,7 @@ forge init my-api --dry-run
 
 ---
 
-##  Generated project
+## Generated project
 
 A generated project follows a structure similar to:
 
@@ -149,42 +167,55 @@ my-api/
 └── go.sum
 ```
 
+After installing features (e.g., `forge add auth`), the structure extends with:
+
+```text
+my-api/
+├── internal/
+│   └── auth/
+│       ├── jwt.go
+│       └── middleware.go
+├── .forge/
+│   └── features.yaml
+└── .env.example  (extended with JWT_SECRET)
+```
+
 ---
 
-##  Architecture
+## Architecture
 
 ForgeKit generates a backend organized around hexagonal architecture.
 
 ```text
-                    ┌──────────────────────┐
-                    │      HTTP API        │
-                    │    Transport Layer   │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │    Application       │
-                    │      Services        │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │       Domain         │
-                    │   Business Logic     │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │   Infrastructure     │
-                    │ PostgreSQL / Config   │
-                    └──────────────────────┘
+                     ┌──────────────────────┐
+                     │      HTTP API        │
+                     │    Transport Layer   │
+                     └──────────┬───────────┘
+                                │
+                                ▼
+                     ┌──────────────────────┐
+                     │    Application       │
+                     │      Services        │
+                     └──────────┬───────────┘
+                                │
+                                ▼
+                     ┌──────────────────────┐
+                     │       Domain         │
+                     │   Business Logic     │
+                     └──────────┬───────────┘
+                                │
+                                ▼
+                     ┌──────────────────────┐
+                     │   Infrastructure     │
+                     │ PostgreSQL / Config   │
+                     └──────────────────────┘
 ```
 
 The objective is to keep business logic independent from infrastructure and transport concerns.
 
 ---
 
-##  Run the generated API with Docker
+## Run the generated API with Docker
 
 Enter the generated project:
 
@@ -233,7 +264,126 @@ Expected response:
 
 ---
 
-##  Validate a generated project
+## Extend a generated project with `forge add`
+
+ForgeKit v0.2.0 introduces an extensible feature system to add capabilities to existing projects.
+
+### List available features
+
+```bash
+forge add --list
+```
+
+Output:
+
+```text
+ForgeKit Features
+────────────────────────────────
+auth 1.0.0 — Infrastructure d'authentification JWT (middleware, validation de token)
+```
+
+### Preview a feature installation (dry-run)
+
+```bash
+forge add auth --dry-run
+```
+
+Output:
+
+```text
+ForgeKit Add
+────────────────────────────────
+
+✓ Projet ForgeKit détecté
+✓ Feature "auth" trouvée
+✓ Prérequis validés
+✓ Plan validé
+
+
+ForgeKit Add
+────────────────────────────────
+Feature : auth
+Version : 1.0.0
+
+Fichiers :
+  → internal/auth/jwt.go
+  → internal/auth/middleware.go
+
+Dépendances :
+  → github.com/golang-jwt/jwt/v5 v5.2.0
+
+Variables d'environnement :
+  → JWT_SECRET=your-secret-key-change-in-production
+
+Aucune modification effectuée (--dry-run).
+```
+
+### Install a feature
+
+```bash
+forge add auth
+```
+
+Output:
+
+```text
+ForgeKit Add
+────────────────────────────────
+
+✓ Projet ForgeKit détecté
+✓ Feature "auth" trouvée
+✓ Prérequis validés
+✓ Plan validé
+
+Installation...
+✓ Fichiers installés
+✓ Dépendances installées
+✓ Projet validé
+
+────────────────────────────────
+✓ Feature "auth" installée avec succès
+```
+
+The `auth` feature adds:
+
+- `internal/auth/jwt.go` — JWT token generation and validation
+- `internal/auth/middleware.go` — HTTP middleware for authentication
+- Dependency: `github.com/golang-jwt/jwt/v5`
+- Environment variable: `JWT_SECRET` in `.env.example`
+- Tracks installation in `.forge/features.yaml`
+
+### Idempotency
+
+Running `forge add auth` twice is safe:
+
+```bash
+$ forge add auth
+✓ Feature "auth" installée avec succès
+
+$ forge add auth
+⚠ Feature "auth" déjà installée
+```
+
+### JSON output
+
+All commands support `--format json` for machine-readable output:
+
+```bash
+forge add --list --format json
+forge add auth --dry-run --format json
+```
+
+### Quiet mode
+
+Suppress non-essential output:
+
+```bash
+forge add auth --quiet
+```
+
+---
+
+## Validate a generated project
 
 ForgeKit provides several commands to help developers verify their project.
 
@@ -277,7 +427,7 @@ go vet ./...
 
 ---
 
-##  CLI
+## CLI
 
 Display the available commands:
 
@@ -311,6 +461,38 @@ JSON output can be requested with:
 ```bash
 forge --format json doctor
 ```
+
+---
+
+## Feature system architecture
+
+ForgeKit v0.2.0 introduces a generic feature infrastructure in `internal/feature/`:
+
+- **Feature interface** — Defines `Name()`, `Description()`, `Version()`, `Check()`, `Plan()`, `Apply()`
+- **ProjectContext** — Project metadata (root, module, Go version)
+- **Manifest** — Feature resources (dependencies, files, environment variables)
+- **Plan** — Computed installation plan
+- **Registry** — Feature registration and discovery
+- **Detector** — Validates ForgeKit project structure
+- **Installer** — Applies plans with rollback support
+- **Installed tracking** — `.forge/features.yaml` records installed features
+
+### Adding a new feature
+
+1. Implement the `Feature` interface in `internal/feature/<name>/`
+2. Add template files in `internal/template/api/internal/<name>/`
+3. Register the feature in `internal/cli/commands.go` in `newAddCommand()`
+
+---
+
+## Limitations
+
+Current v0.2.0 limitations:
+
+- Only `auth` feature is implemented
+- No `forge remove` command yet
+- No feature version upgrade path (manual intervention required)
+- Features must be registered in the CLI binary (no plugin system yet)
 
 ---
 
@@ -348,11 +530,17 @@ ForgeKit turns this repetitive process into:
 forge init my-api
 ```
 
+And extends it with features:
+
+```bash
+forge add auth
+```
+
 The developer can then focus on the actual business logic.
 
 ---
 
-##  Project philosophy
+## Project philosophy
 
 ForgeKit is not intended to hide Go from developers.
 
@@ -385,9 +573,11 @@ The generated project belongs to the developer. ForgeKit does not create a propr
 
 ### v0.2.0
 
-Planned:
-
-- [ ] Authentication manifest
+- [x] Feature system (`forge add`)
+- [x] JWT authentication (`forge add auth`)
+- [x] Idempotent feature installation
+- [x] Dry-run support
+- [x] JSON/quiet output modes
 - [ ] Redis integration
 - [ ] Swagger/OpenAPI generation
 - [ ] Additional database options
@@ -408,7 +598,7 @@ Potential directions:
 
 ---
 
-##  Contributing
+## Contributing
 
 Contributions are welcome.
 
@@ -436,6 +626,27 @@ See the repository license for details.
 If ForgeKit is useful to you, consider starring the repository on GitHub.
 
 Issues, feature requests, documentation improvements, and pull requests are welcome.
+
+---
+
+## Changelog
+
+### v0.2.0 (2026-08-10)
+
+- Added `forge add` command with extensible feature system
+- Implemented `forge add auth` for JWT authentication infrastructure
+- Added `--list`, `--dry-run`, `--format json`, `--quiet` flags
+- Added progress display with spinners and colored output
+- Added `.forge/features.yaml` for tracking installed features
+- Added rollback mechanism for failed installations
+- Added comprehensive unit tests for feature system
+- Updated generated project structure with `internal/auth/`
+
+### v0.1.2
+
+- Initial release with `forge init`, `forge doctor`, `forge check`, `forge analyze`
+- Hexagonal architecture scaffolding
+- PostgreSQL, Docker, migrations, tests
 
 ---
 

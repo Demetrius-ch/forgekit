@@ -7,8 +7,34 @@ import (
 	"strings"
 
 	"github.com/Demetrius-ch/forgekit/internal/app"
+	"github.com/Demetrius-ch/forgekit/internal/output"
 	"github.com/spf13/cobra"
 )
+
+const branding = `
+  ███████╗ ██████╗ ██████╗  ██████╗ ███████╗
+  ██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
+  █████╗  ██║   ██║██████╔╝██║  ███╗█████╗
+  ██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
+  ██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
+  ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+
+  ForgeKit
+  Build • Extend • Ship
+`
+
+// printBranding prints the ForgeKit branding if conditions are met.
+func printBranding(g *globalFlags) {
+	console := g.console()
+
+	// Skip branding in JSON or quiet mode
+	if console.Format == output.FormatJSON || console.Quiet {
+		return
+	}
+
+	fmt.Fprint(console.Out, branding)
+	fmt.Fprintln(console.Out)
+}
 
 // NewRootCommand builds the forge CLI root command.
 func NewRootCommand() *cobra.Command {
@@ -23,22 +49,54 @@ func NewRootCommand() *cobra.Command {
 
 	bindGlobalFlags(root, g)
 	root.AddCommand(newInitCommand(g))
-	root.AddCommand(newVersionCommand())
+	root.AddCommand(newVersionCommand(g))
 	root.AddCommand(newAddCommand(g))
 	root.AddCommand(newDoctorCommand(g))
 	root.AddCommand(newAnalyzeCommand(g))
 	root.AddCommand(newCheckCommand(g))
 	root.AddCommand(newConfigCommand(g))
 
+	// Override help to show branding for 'forge' and 'forge --help' only (not subcommands)
+	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		// Only show branding for root command
+		if cmd == root {
+			printBranding(g)
+		}
+		cmd.Flags().PrintDefaults()
+		fmt.Fprint(cmd.OutOrStdout(), cmd.Long+"\n\n")
+		fmt.Fprint(cmd.OutOrStdout(), cmd.UsageString())
+	})
+
 	return root
 }
 
-func newVersionCommand() *cobra.Command {
+func newVersionCommand(g *globalFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Afficher la version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("%s version %s\n", app.Name, app.Version)
+			console := g.console()
+
+			if console.Format == output.FormatJSON {
+				type versionInfo struct {
+					Name    string `json:"name"`
+					Version string `json:"version"`
+					Slogan  string `json:"slogan"`
+				}
+				_ = console.PrintJSON(versionInfo{
+					Name:    app.Name,
+					Version: app.Version,
+					Slogan:  "Build • Extend • Ship",
+				})
+				return
+			}
+
+			if !console.Quiet {
+				fmt.Fprintf(console.Out, "%s version %s\n", app.Name, app.Version)
+				fmt.Fprintln(console.Out, "Build • Extend • Ship")
+			} else {
+				fmt.Fprintf(console.Out, "%s\n", app.Version)
+			}
 		},
 	}
 }
