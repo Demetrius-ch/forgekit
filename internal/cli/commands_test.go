@@ -102,9 +102,10 @@ func TestAnalyzeProgressScoresMatchFinalScore(t *testing.T) {
 	outBytes, _ := io.ReadAll(r)
 	outputStr := strings.ReplaceAll(string(outBytes), "\r", "\n")
 
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	outputStr = ansiRegex.ReplaceAllString(outputStr, "")
 	progressRegex := regexp.MustCompile(`(?m)^[✓✗] (Architecture|Tests|Security|Configuration|Docker|Documentation) — (\d{1,3})/100`)
-	finalRegex := regexp.MustCompile(`(?m)^\x1b\[36m(Architecture|Tests|Security|Configuration|Docker|Documentation)\x1b\[0m\n[\s\S]*? (\d{1,3})/100`)
-
+	finalRegex := regexp.MustCompile(`(?ms)^(Architecture|Tests|Security|Configuration|Docker|Documentation)\n.*?(\d{1,3})/100`)
 	progressMatches := progressRegex.FindAllStringSubmatch(outputStr, -1)
 	if len(progressMatches) == 0 {
 		t.Fatalf("expected progress scores in output, got %q", outputStr)
