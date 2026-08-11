@@ -1,0 +1,144 @@
+package logging
+
+import (
+	"log/slog"
+	"net/http"
+	"strings"
+	"time"
+)
+
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	written    bool
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	if !rw.written {
+		rw.statusCode = code
+		rw.written = true
+	}
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	if !rw.written {
+		rw.statusCode = http.StatusOK
+		rw.written = true
+	}
+	return rw.ResponseWriter.Write(b)
+}
+
+var sensitiveHeaders = map[string]bool{
+	"authorization":      true,
+	"cookie":             true,
+	"set-cookie":         true,
+	"x-api-key":          true,
+	"x-auth-token":       true,
+	"proxy-authorization": true,
+}
+
+var sensitiveQueryParams = map[string]bool{
+	"password":       true,
+	"token":          true,
+	"api_key":        true,
+	"apikey":         true,
+	"secret":         true,
+	"access_token":   true,
+	"refresh_token":  true,
+	"jwt":            true,
+	"auth":           true,
+}
+
+func redactHeaders(headers http.Header) map[string]string {
+	result := make(map[string]string)
+	for k, v := range headers {
+		if sensitiveHeaders[strings.ToLower(k)] {
+			result[k] = "[REDACTED]"
+		} else {
+			result[k] = strings.Join(v, ", ")
+		}
+	}
+	return result
+}
+
+func redactQueryParams(query string) string {
+	if query == "" {
+		return ""
+	}
+	parts := strings.Split(query, "&")
+	var result []string
+	for _, part := range parts {
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) == 2 && sensitiveQueryParams[strings.ToLower(kv[0])] {
+			result = append(result, kv[0]+"=[REDACTED]")
+		} else {
+			result = append(result, part)
+		}
+	}
+	return strings.Join(result, "&")
+}
+
+func LoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+
+			path := r.URL.Path
+			if r.URL.RawQuery != "" {
+				path += "?" + redactQueryParams(r.URL.RawQuery)
+			}
+
+			logger.Info("request started",
+				"method", r.Method,
+				"path", path,
+				"remote_addr", r.RemoteAddr,
+				"user_agent", r.UserAgent(),
+			)
+
+			next.ServeHTTP(rw, r)
+
+			duration := time.Since(start)
+
+			logger.Info("request completed",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", rw.statusCode,
+				"duration_ms", duration.Milliseconds(),
+			)
+		})
+	}
+}
+
+func DetailedLoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+
+			redactedHeaders := redactHeaders(r.Header)
+
+			logger.Debug("request details",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"query", redactQueryParams(r.URL.RawQuery),
+				"headers", redactedHeaders,
+				"remote_addr", r.RemoteAddr,
+			)
+
+			next.ServeHTTP(rw, r)
+
+			duration := time.Since(start)
+
+			logger.Info("request completed",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", rw.statusCode,
+				"duration_ms", duration.Milliseconds(),
+			)
+		})
+	}
+}

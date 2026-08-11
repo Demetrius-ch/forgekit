@@ -1,0 +1,57 @@
+package logging
+
+import (
+	"io"
+	"log/slog"
+	"os"
+	"strings"
+)
+
+const (
+	EnvLogLevel  = "LOG_LEVEL"
+	EnvLogFormat = "LOG_FORMAT"
+)
+
+type Logger struct {
+	*slog.Logger
+}
+
+func NewLogger(w io.Writer, level slog.Level, jsonOutput bool) *Logger {
+	var handler slog.Handler
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
+
+	if jsonOutput {
+		handler = slog.NewJSONHandler(w, opts)
+	} else {
+		handler = slog.NewTextHandler(w, opts)
+	}
+
+	return &Logger{Logger: slog.New(handler)}
+}
+
+func DefaultLogger() *Logger {
+	level := parseLevel(os.Getenv(EnvLogLevel))
+	jsonOutput := strings.EqualFold(os.Getenv(EnvLogFormat), "json")
+	return NewLogger(os.Stdout, level, jsonOutput)
+}
+
+func parseLevel(s string) slog.Level {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
+func WithFields(l *Logger, args ...any) *Logger {
+	return &Logger{Logger: l.Logger.With(args...)}
+}

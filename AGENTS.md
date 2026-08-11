@@ -17,6 +17,10 @@ go build ./...
 # Run single package tests
 go test ./internal/generator/...
 go test ./internal/feature/...
+go test ./internal/cli/...
+go test ./internal/output/...
+go test ./internal/report/...
+go test ./internal/rules/...
 
 # Integration test (runs in CI)
 ./forge init ci-api --non-interactive --module github.com/forgekit/ci-api
@@ -27,18 +31,29 @@ cd ci-api && go test ./...
 
 - **cmd/forge/main.go** — Entry point, delegates to `internal/cli`
 - **internal/cli/commands.go** — All CLI commands (init, add, doctor, check, analyze, config, version)
+- **internal/cli/root.go** — Root command setup, global flags, branding
 - **internal/generator/** — Project generation logic (templates in `internal/template/`)
-- **internal/template/api/** — Go templates for generated project structure
-- **internal/feature/** — Feature registry for `forge add`
+- **internal/template/api/** — Go text/template files for generated project structure
+- **internal/feature/** — Feature registry for `forge add` (interface, detector, installer, registry)
+- **internal/feature/auth/** — JWT authentication feature implementation
 - **internal/doctor/** — Environment diagnostics
 - **internal/check/** — Architecture validation
 - **internal/analyze/** — Project analysis
-- **internal/rules/** — Architectural rules for check/analyze
+- **internal/rules/** — Architectural rules for check/analyze (security, architecture, quality, environment)
+- **internal/app/** — App metadata (name, version, slogan)
+- **internal/config/** — User config (~/.forgekit/config.yaml)
+- **internal/output/** — Console output utilities (spinner, colored output, JSON)
+- **internal/template/** — Template rendering engine
+- **internal/engine/** — Template execution engine with variables
+- **internal/report/** — Scoring and reporting for analyze
+- **internal/errs/** — Error types
+- **internal/prompt/** — Interactive prompts
+- **pkg/generator/** — Shared generator types
 
 ## Dependencies
 - `github.com/spf13/cobra` — CLI framework
 - `gopkg.in/yaml.v3` — YAML config parsing
-- Go 1.22+ (per go.mod, though README says 1.25+)
+- Go 1.22+ (per go.mod)
 
 ## Generated Project Stack (Fixed in V0.1)
 - Go stdlib `net/http` (or Chi) — no Gin/Echo/Fiber
@@ -51,16 +66,16 @@ cd ci-api && go test ./...
 
 ### Add a new CLI command
 1. Add command in `internal/cli/commands.go`
-2. Register in `internal/cli/root.go`
+2. Register in `internal/cli/root.go` (in `NewRootCommand`)
 3. Add tests in `internal/cli/commands_test.go`
 
 ### Modify generated project templates
 Edit files in `internal/template/api/` — these are Go text/template files.
 
 ### Add a new `forge add` feature
-1. Register feature in `internal/feature/registry.go`
-2. Implement generator logic in `internal/generator/`
-3. Add template files in `internal/template/api/`
+1. Implement the `Feature` interface in `internal/feature/<name>/`
+2. Add template files in `internal/template/api/internal/<name>/`
+3. Register the feature in `internal/cli/commands.go` in `newAddCommand()`
 
 ## CI Pipeline (`.github/workflows/ci.yml`)
 Runs on push/PR to main/master:
@@ -79,14 +94,23 @@ go vet ./...
 go build ./...
 ```
 
-## Known Issues
-- `internal/cli/commands.go:456` has unused variable `console` — build fails until fixed
-- Some internal packages lack tests (analyzer, app, config, engine, errs, prompt, template, pkg/generator)
+## Packages Without Tests
+These internal packages currently have no test files:
+- `cmd/forge` (entry point, expected)
+- `internal/analyzer`
+- `internal/app`
+- `internal/config`
+- `internal/engine`
+- `internal/errs`
+- `internal/prompt`
+- `internal/template`
+- `pkg/generator`
 
 ## Environment
 - Requires Docker for generated project's Docker workflow
 - Uses `.env.example` as template for generated projects
 - Default API port: 8080
+- User config at `~/.forgekit/config.yaml`
 
 ## Useful References
 - `README.md` — User-facing docs, usage examples

@@ -12,6 +12,7 @@ import (
 	"github.com/Demetrius-ch/forgekit/internal/config"
 	"github.com/Demetrius-ch/forgekit/internal/feature"
 	"github.com/Demetrius-ch/forgekit/internal/feature/auth"
+	"github.com/Demetrius-ch/forgekit/internal/feature/logging"
 	"github.com/Demetrius-ch/forgekit/internal/generator"
 	"github.com/Demetrius-ch/forgekit/internal/output"
 	"github.com/Demetrius-ch/forgekit/internal/prompt"
@@ -367,7 +368,7 @@ func newAddCommand(g *globalFlags) *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			registry := feature.NewRegistry(auth.AuthFeature{})
+			registry := feature.NewRegistry(auth.AuthFeature{}, logging.LoggingFeature{})
 
 			if list {
 				return runFeatureList(g, registry)
@@ -515,11 +516,35 @@ func runFeatureAdd(
 		spinner.Start("Vérification des prérequis...")
 	}
 
-	if err := f.Check(ctx, project); err != nil {
+	checkErr := f.Check(ctx, project)
+	alreadyInstalled := checkErr != nil && strings.Contains(checkErr.Error(), "déjà installée")
+	if checkErr != nil {
 		if spinner != nil {
-			spinner.Stop("✗ Vérification des prérequis — échec")
+			if alreadyInstalled {
+				spinner.Stop("✓ Feature déjà installée")
+			} else {
+				spinner.Stop("✗ Vérification des prérequis — échec")
+			}
 		}
-		return fmt.Errorf("vérification de la feature %q : %w", name, err)
+		// In dry-run mode, treat "already installed" as a special case
+		if dryRun && alreadyInstalled {
+			// Show already installed message for dry-run
+			if g.Format == output.FormatHuman && !g.Quiet {
+				fmt.Fprintln(console.Out)
+				fmt.Fprintln(console.Out, "Dry-run")
+				fmt.Fprintln(console.Out, "────────────────────────────────")
+				fmt.Fprintln(console.Out)
+				fmt.Fprintln(console.Out, "Aucune modification ne sera effectuée.")
+				fmt.Fprintf(console.Out, "Feature : %s\n", name)
+				// Extract version from error message
+				version := strings.TrimPrefix(strings.TrimPrefix(checkErr.Error(), "vérification de la feature "), name+" version ")
+				version = strings.TrimSuffix(version, " déjà installée")
+				fmt.Fprintf(console.Out, "Version installée : %s\n", version)
+				fmt.Fprintln(console.Out, "Statut : aucune modification nécessaire.")
+			}
+			return nil
+		}
+		return fmt.Errorf("vérification de la feature %q : %w", name, checkErr)
 	}
 	if spinner != nil {
 		spinner.Stop("✓ Prérequis validés")
