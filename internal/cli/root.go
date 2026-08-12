@@ -113,14 +113,14 @@ func defaultDatabaseName(projectName string) string {
 	return strings.ReplaceAll(projectName, "-", "_")
 }
 
-func printInitSummaryOpts(projectName, modulePath, targetDir, db string, port int) {
+func printInitSummaryOpts(projectName, modulePath, targetDir, db string, httpPort, postgresHostPort int) {
 	fmt.Fprintf(os.Stdout, `
 ✓ Projet %q créé avec succès
 
   Répertoire :  %s
   Module Go :   %s
   Port HTTP :   %d
-  Base PostgreSQL : %s
+  PostgreSQL :  localhost:%d
 
 Prochaines étapes recommandées :
 
@@ -135,5 +135,5 @@ Prochaines étapes recommandées :
   forge analyze
 
 Votre projet est prêt pour une première exécution locale et pour les vérifications de qualité.
-`, projectName, targetDir, modulePath, port, db, filepath.Base(targetDir))
+`, projectName, targetDir, modulePath, httpPort, postgresHostPort, filepath.Base(targetDir))
 }

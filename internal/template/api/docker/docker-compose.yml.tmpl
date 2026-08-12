@@ -1,4 +1,5 @@
 services:
+  {{- if not .USE_EXISTING_DB }}
   postgres:
     image: postgres:16-alpine
     container_name: {{ .ProjectName }}-postgres
@@ -7,7 +8,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: {{ .DatabaseName }}
     ports:
-      - "5432:5432"
+      - "{{ .PostgresHostPort }}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -15,7 +16,39 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+  {{- else if .EXTERNAL_DB_HOST }}
+  {{- else }}
+  postgres:
+    image: postgres:16-alpine
+    container_name: {{ .ProjectName }}-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "{{ .PostgresHostPort }}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  {{- end }}
 
+  {{- if .USE_EXISTING_DB }}
+  {{- if .EXTERNAL_DB_HOST }}
+  migrate:
+    image: migrate/migrate:v4.18.1
+    volumes:
+      - ../migrations:/migrations
+    command:
+      [
+        "-path", "/migrations",
+        "-database", "postgres://{{ .EXTERNAL_DB_USER }}:{{ .EXTERNAL_DB_PASSWORD }}@{{ .EXTERNAL_DB_HOST }}:{{ .EXTERNAL_DB_PORT }}/{{ .EXTERNAL_DB_NAME }}?sslmode=disable",
+        "up"
+      ]
+  {{- else }}
   migrate:
     image: migrate/migrate:v4.18.1
     depends_on:
@@ -29,7 +62,25 @@ services:
         "-database", "postgres://postgres:postgres@postgres:5432/{{ .DatabaseName }}?sslmode=disable",
         "up"
       ]
+  {{- end }}
+  {{- else }}
+  migrate:
+    image: migrate/migrate:v4.18.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../migrations:/migrations
+    command:
+      [
+        "-path", "/migrations",
+        "-database", "postgres://postgres:postgres@postgres:5432/{{ .DatabaseName }}?sslmode=disable",
+        "up"
+      ]
+  {{- end }}
 
+  {{- if .USE_EXISTING_DB }}
+  {{- if .EXTERNAL_DB_HOST }}
   api:
     build:
       context: ..
@@ -40,9 +91,47 @@ services:
         condition: service_completed_successfully
     environment:
       HTTP_PORT: "{{ .HTTPPort }}"
+      HTTP_ADDR: "0.0.0.0:{{ .HTTPPort }}"
+      DATABASE_URL: postgres://{{ .EXTERNAL_DB_USER }}:{{ .EXTERNAL_DB_PASSWORD }}@{{ .EXTERNAL_DB_HOST }}:{{ .EXTERNAL_DB_PORT }}/{{ .EXTERNAL_DB_NAME }}?sslmode=disable
+    ports:
+      - "{{ .HTTPPort }}:{{ .HTTPPort }}"
+  {{- else }}
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: {{ .ProjectName }}-api
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      HTTP_PORT: "{{ .HTTPPort }}"
+      HTTP_ADDR: "0.0.0.0:{{ .HTTPPort }}"
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/{{ .DatabaseName }}?sslmode=disable
     ports:
       - "{{ .HTTPPort }}:{{ .HTTPPort }}"
+  {{- end }}
+  {{- else }}
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: {{ .ProjectName }}-api
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      HTTP_PORT: "{{ .HTTPPort }}"
+      HTTP_ADDR: "0.0.0.0:{{ .HTTPPort }}"
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/{{ .DatabaseName }}?sslmode=disable
+    ports:
+      - "{{ .HTTPPort }}:{{ .HTTPPort }}"
+  {{- end }}
 
+{{- if not .USE_EXISTING_DB }}
 volumes:
   postgres_data:
+{{- else if not .EXTERNAL_DB_HOST }}
+volumes:
+  postgres_data:
+{{- end }}

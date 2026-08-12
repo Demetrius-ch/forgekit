@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // Prompter asks simple questions on stdin/stdout.
@@ -46,4 +49,15 @@ func (p *Prompter) AskInt(prompt string, defaultValue int) (int, error) {
 		return 0, fmt.Errorf("valeur invalide pour %s: %w", prompt, err)
 	}
 	return value, nil
+}
+
+func (p *Prompter) AskPassword(prompt string) (string, error) {
+	fmt.Fprintf(p.out, "%s: ", prompt)
+	// Read password without echoing
+	bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+	if err != nil {
+		return "", err
+	}
+	fmt.Fprintln(p.out) // New line after password input
+	return string(bytePassword), nil
 }

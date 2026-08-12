@@ -49,13 +49,20 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	}
 
 	data := template.Data{
-		ProjectName:  opts.ProjectName,
-		ModulePath:   opts.ModulePath,
-		PackageName:  PackageNameFromProject(opts.ProjectName),
-		HTTPPort:     opts.HTTPPort,
-		DatabaseName: opts.DatabaseName,
-		GoVersion:    "1.25",
-		Author:       opts.Author,
+		ProjectName:        opts.ProjectName,
+		ModulePath:         opts.ModulePath,
+		PackageName:        PackageNameFromProject(opts.ProjectName),
+		HTTPPort:           opts.HTTPPort,
+		PostgresHostPort:   opts.PostgresHostPort,
+		DatabaseName:       opts.DatabaseName,
+		GoVersion:          "1.25",
+		Author:             opts.Author,
+		UseExistingDB:      opts.UseExistingDB,
+		ExternalDBHost:     opts.ExternalDBHost,
+		ExternalDBPort:     opts.ExternalDBPort,
+		ExternalDBUser:     opts.ExternalDBUser,
+		ExternalDBPassword: opts.ExternalDBPassword,
+		ExternalDBName:     opts.ExternalDBName,
 	}
 
 	if !opts.DryRun {

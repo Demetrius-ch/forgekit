@@ -1,0 +1,128 @@
+openapi: 3.0.3
+info:
+  title: {{ .ProjectName }} API
+  version: 1.0.0
+  description: |
+    API REST générée avec ForgeKit.
+    Architecture hexagonale avec PostgreSQL, Docker et tests automatisés.
+servers:
+  - url: http://localhost:{{ .HTTPPort }}
+    description: Serveur de développement local
+  - url: https://api.{{ .ProjectName }}.com
+    description: Serveur de production
+paths:
+  /health:
+    get:
+      summary: Vérification de l'état du service
+      description: Endpoint de health check pour vérifier que l'API fonctionne correctement.
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service opérationnel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /users:
+    post:
+      summary: Créer un utilisateur
+      description: Crée un nouvel utilisateur dans le système.
+      operationId: createUser
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: Utilisateur créé avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Données invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email déjà utilisé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        service:
+          type: string
+          example: "{{ .ProjectName }}"
+        status:
+          type: string
+          enum: [ok]
+          example: "ok"
+      required:
+        - service
+        - status
+    CreateUserRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        name:
+          type: string
+          example: "John Doe"
+      required:
+        - email
+        - name
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        name:
+          type: string
+          example: "John Doe"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+      required:
+        - id
+        - email
+        - name
+        - created_at
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "validation failed"
+        message:
+          type: string
+          example: "email is required"
+      required:
+        - error
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []

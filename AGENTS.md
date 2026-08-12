@@ -36,27 +36,31 @@ cd ci-api && go test ./...
 - **internal/template/api/** — Go text/template files for generated project structure
 - **internal/feature/** — Feature registry for `forge add` (interface, detector, installer, registry)
 - **internal/feature/auth/** — JWT authentication feature implementation
-- **internal/doctor/** — Environment diagnostics
-- **internal/check/** — Architecture validation
-- **internal/analyze/** — Project analysis
-- **internal/rules/** — Architectural rules for check/analyze (security, architecture, quality, environment)
+- **internal/feature/logging/** — Logging feature implementation
+- **internal/feature/swagger/** — Swagger/OpenAPI feature implementation
+- **internal/rules/** — Architectural rules for check/analyze (security, architecture, quality, environment, docker, config)
+- **internal/analyzer/project.go** — Project analysis logic
 - **internal/app/** — App metadata (name, version, slogan)
-- **internal/config/** — User config (~/.forgekit/config.yaml)
+- **internal/config/** — User config (~/.forgekit/config.yaml) and project config (forge.yaml)
 - **internal/output/** — Console output utilities (spinner, colored output, JSON)
-- **internal/template/** — Template rendering engine
 - **internal/engine/** — Template execution engine with variables
 - **internal/report/** — Scoring and reporting for analyze
 - **internal/errs/** — Error types
 - **internal/prompt/** — Interactive prompts
+- **internal/template/** — Template rendering engine
+- **internal/ports/** — Port availability checking for generated projects
+- **internal/dbinspect/** — Database inspection (migrations, schema)
 - **pkg/generator/** — Shared generator types
+
+Note: `internal/doctor`, `internal/analyze`, `internal/check`, `internal/arch`, `internal/project` are empty directories; logic lives in `cli/commands.go` and `rules/`.
 
 ## Dependencies
 - `github.com/spf13/cobra` — CLI framework
 - `gopkg.in/yaml.v3` — YAML config parsing
-- Go 1.22+ (per go.mod)
+- Go 1.25+ (per go.mod)
 
 ## Generated Project Stack (Fixed in V0.1)
-- Go stdlib `net/http` (or Chi) — no Gin/Echo/Fiber
+- Go stdlib `net/http` with **Chi router** (`github.com/go-chi/chi/v5`)
 - PostgreSQL with `database/sql` — no GORM
 - Docker Compose for local dev
 - Environment config via `.env` (caarlos0/env pattern)
@@ -75,7 +79,7 @@ Edit files in `internal/template/api/` — these are Go text/template files.
 ### Add a new `forge add` feature
 1. Implement the `Feature` interface in `internal/feature/<name>/`
 2. Add template files in `internal/template/api/internal/<name>/`
-3. Register the feature in `internal/cli/commands.go` in `newAddCommand()`
+3. Register the feature in `internal/cli/commands.go` in `newAddCommand()` (see `auth.AuthFeature{}, logging.LoggingFeature{}, swagger.SwaggerFeature{}`)
 
 ## CI Pipeline (`.github/workflows/ci.yml`)
 Runs on push/PR to main/master:
@@ -111,6 +115,7 @@ These internal packages currently have no test files:
 - Uses `.env.example` as template for generated projects
 - Default API port: 8080
 - User config at `~/.forgekit/config.yaml`
+- Project config at `forge.yaml` in generated projects
 
 ## Useful References
 - `README.md` — User-facing docs, usage examples
