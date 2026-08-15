@@ -168,17 +168,20 @@ func TestSwaggerFeaturePlan(t *testing.T) {
 	if plan.Feature != "swagger" {
 		t.Fatalf("Expected feature 'swagger', got %s", plan.Feature)
 	}
-	if plan.Version != "1.0.0" {
-		t.Fatalf("Expected version '1.0.0', got %s", plan.Version)
+	if plan.Version != "1.0.1" {
+		t.Fatalf("Expected version '1.0.1', got %s", plan.Version)
 	}
 	if len(plan.Files) != 2 {
 		t.Fatalf("Expected 2 files, got %d", len(plan.Files))
 	}
-	if len(plan.Dependencies) != 1 {
-		t.Fatalf("Expected 1 dependency, got %d", len(plan.Dependencies))
+	if len(plan.Dependencies) != 2 {
+		t.Fatalf("Expected 2 dependencies, got %d", len(plan.Dependencies))
 	}
 	if plan.Dependencies[0].Module != "github.com/swaggo/http-swagger" {
 		t.Fatalf("Expected swaggo/http-swagger dependency, got %s", plan.Dependencies[0].Module)
+	}
+	if plan.Dependencies[1].Module != "gopkg.in/yaml.v3" {
+		t.Fatalf("Expected gopkg.in/yaml.v3 dependency, got %s", plan.Dependencies[1].Module)
 	}
 	if len(plan.Environment) != 1 {
 		t.Fatalf("Expected 1 env var, got %d", len(plan.Environment))
@@ -277,8 +280,8 @@ func TestSwaggerFeatureApply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read router.go: %v", err)
 	}
-	if !contains(string(routerContent), "httpSwagger") {
-		t.Fatal("Swagger route not found in router.go")
+	if !contains(string(routerContent), "swagger.RegisterRoutes") {
+		t.Fatal("Swagger RegisterRoutes not found in router.go")
 	}
 }
 

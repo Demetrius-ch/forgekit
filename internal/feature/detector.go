@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -63,11 +64,35 @@ func (Detector) Detect(root string) (ProjectContext, error) {
 		}
 	}
 
+	httpPort := readHTTPPort(root)
+
 	return ProjectContext{
 		Root:      root,
 		Module:    module,
 		GoVersion: goVersion,
+		HTTPPort:  httpPort,
 	}, nil
+}
+
+func readHTTPPort(root string) int {
+	envPath := filepath.Join(root, ".env.example")
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		return 8080 // default
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "HTTP_PORT=") {
+			portStr := strings.TrimPrefix(line, "HTTP_PORT=")
+			port, err := strconv.Atoi(portStr)
+			if err == nil && port > 0 {
+				return port
+			}
+		}
+	}
+	return 8080
 }
 
 func parseModule(data []byte) string {

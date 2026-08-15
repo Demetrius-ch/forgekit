@@ -2,7 +2,46 @@
 
 package swagger
 
-import _ "embed"
+import (
+	_ "embed"
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/swaggo/http-swagger"
+	"gopkg.in/yaml.v3"
+)
 
 //go:embed openapi.yaml
 var OpenAPISpec []byte
+
+// OpenAPISpecJSON returns the OpenAPI specification as JSON.
+func OpenAPISpecJSON() []byte {
+	var data any
+	if err := yaml.Unmarshal(OpenAPISpec, &data); err != nil {
+		return []byte(`{"error": "failed to parse OpenAPI spec"}`)
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return []byte(`{"error": "failed to marshal OpenAPI spec to JSON"}`)
+	}
+	return jsonData
+}
+
+// RegisterRoutes registers Swagger documentation routes on the given chi router.
+func RegisterRoutes(r chi.Router) {
+	// Serve raw OpenAPI YAML
+	r.Get("/openapi.yaml", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write(OpenAPISpec)
+	})
+
+	// Serve OpenAPI JSON (for http-swagger compatibility)
+	r.Get("/swagger/doc.json", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(OpenAPISpecJSON())
+	})
+
+	// Serve Swagger UI
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+}

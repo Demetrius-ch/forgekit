@@ -22,7 +22,7 @@ func (SwaggerFeature) Description() string {
 }
 
 func (SwaggerFeature) Version() string {
-	return "1.0.0"
+	return "1.0.1"
 }
 
 func (SwaggerFeature) Check(ctx context.Context, project feature.ProjectContext) error {
@@ -52,7 +52,7 @@ func (SwaggerFeature) Check(ctx context.Context, project feature.ProjectContext)
 func (SwaggerFeature) Plan(ctx context.Context, project feature.ProjectContext) (feature.Plan, error) {
 	return feature.Plan{
 		Feature: "swagger",
-		Version: "1.0.0",
+		Version: "1.0.1",
 		Files: []feature.FileAction{
 			{
 				Source:      "internal/swagger/swagger.go.tmpl",
@@ -65,6 +65,7 @@ func (SwaggerFeature) Plan(ctx context.Context, project feature.ProjectContext) 
 		},
 		Dependencies: []feature.Dependency{
 			{Module: "github.com/swaggo/http-swagger", Version: "v1.3.4"},
+			{Module: "gopkg.in/yaml.v3", Version: "v3.0.1"},
 		},
 		Environment: []string{
 			"SWAGGER_ENABLED=true",
@@ -82,7 +83,7 @@ func (SwaggerFeature) Apply(ctx context.Context, project feature.ProjectContext,
 		ProjectName:  filepath.Base(project.Root),
 		ModulePath:   project.Module,
 		PackageName:  filepath.Base(project.Root),
-		HTTPPort:     8080,
+		HTTPPort:     project.HTTPPort,
 		DatabaseName: "",
 		GoVersion:    project.GoVersion,
 		Author:       "",
@@ -133,7 +134,7 @@ func (SwaggerFeature) Apply(ctx context.Context, project feature.ProjectContext,
 		return fmt.Errorf("gofmt après intégration : %w", err)
 	}
 
-	if err := feature.AddInstalledFeature(project.Root, "swagger", "1.0.0"); err != nil {
+	if err := feature.AddInstalledFeature(project.Root, "swagger", SwaggerFeature{}.Version()); err != nil {
 		return fmt.Errorf("enregistrer l'installation : %w", err)
 	}
 
@@ -179,31 +180,51 @@ func integrateRouterGo(projectRoot, modulePath string) error {
 	src := string(content)
 
 	// Check if already integrated
-	if strings.Contains(src, "httpSwagger") && strings.Contains(src, `"`+modulePath+`/internal/swagger"`) {
+	if strings.Contains(src, "swagger.RegisterRoutes") && strings.Contains(src, `"`+modulePath+`/internal/swagger"`) {
 		return nil // Already integrated
 	}
 
-	// Add swagger import (blank import for swagger docs)
+	// Add swagger import
 	importBlock := `import (`
-	newImport := importBlock + "\n\t" + `httpSwagger "github.com/swaggo/http-swagger"` + "\n\t" + `_ "` + modulePath + "/internal/swagger" + `"`
+	newImport := importBlock + "\n\t" + `"` + modulePath + "/internal/swagger" + `"`
 	src = strings.Replace(src, importBlock, newImport, 1)
 
-	// Add Swagger UI route - insert after the middleware chain setup
-	// Look for the route definitions and add swagger route
-	oldRoutes := `	r.Get("/health", handler.NewHealth(logger, healthSvc).ServeHTTP)`
-	newRoutes := `	r.Get("/health", handler.NewHealth(logger, healthSvc).ServeHTTP)
+	// Add Swagger routes registration - insert after the route definitions
+	// Try multiple patterns to find the integration point
+	patterns := []struct {
+		oldStr string
+		newStr string
+	}{
+		// Pattern 1: Standard ForgeKit router with users route
+		{
+			oldStr: `	r.Post("/users", handler.NewUser(logger, userSvc).Create)`,
+			newStr: `	r.Post("/users", handler.NewUser(logger, userSvc).Create)
 
-	// Swagger UI
-	r.Get("/swagger/*", httpSwagger.WrapHandler)`
+	// Swagger documentation routes
+	swagger.RegisterRoutes(r)`,
+		},
+		// Pattern 2: Minimal router with only health route (test scenario)
+		{
+			oldStr: `	r.Get("/health", handler.NewHealth(logger, healthSvc).ServeHTTP)`,
+			newStr: `	r.Get("/health", handler.NewHealth(logger, healthSvc).ServeHTTP)
 
-	if !strings.Contains(src, oldRoutes) {
-		// Try alternative pattern
-		oldRoutes = `r.Get("/health", handler.NewHealth(logger, healthSvc).ServeHTTP)`
-		if !strings.Contains(src, oldRoutes) {
-			return fmt.Errorf("point d'intégration router.go introuvable : health route")
+	// Swagger documentation routes
+	swagger.RegisterRoutes(r)`,
+		},
+	}
+
+	integrated := false
+	for _, p := range patterns {
+		if strings.Contains(src, p.oldStr) {
+			src = strings.Replace(src, p.oldStr, p.newStr, 1)
+			integrated = true
+			break
 		}
 	}
-	src = strings.Replace(src, oldRoutes, newRoutes, 1)
+
+	if !integrated {
+		return fmt.Errorf("point d'intégration router.go introuvable : routes")
+	}
 
 	if err := os.WriteFile(routerPath, []byte(src), 0o644); err != nil {
 		return fmt.Errorf("écrire router.go : %w", err)

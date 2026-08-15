@@ -22,6 +22,9 @@ go test ./internal/output/...
 go test ./internal/report/...
 go test ./internal/rules/...
 
+# Run e2e tests (requires build tag)
+go test -tags=e2e ./internal/e2e/...
+
 # Integration test (runs in CI)
 ./forge init ci-api --non-interactive --module github.com/forgekit/ci-api
 cd ci-api && go test ./...
@@ -52,12 +55,12 @@ cd ci-api && go test ./...
 - **internal/dbinspect/** — Database inspection (migrations, schema)
 - **pkg/generator/** — Shared generator types
 
-Note: `internal/doctor`, `internal/analyze`, `internal/check`, `internal/arch`, `internal/project` are empty directories; logic lives in `cli/commands.go` and `rules/`.
+Note: `internal/doctor`, `internal/analyze`, `internal/arch`, `internal/project` are empty directories; `internal/check` does not exist; logic lives in `cli/commands.go` and `rules/`.
 
 ## Dependencies
 - `github.com/spf13/cobra` — CLI framework
 - `gopkg.in/yaml.v3` — YAML config parsing
-- Go 1.25+ (per go.mod)
+- Go 1.25+ (per go.mod), CI uses 1.22
 
 ## Generated Project Stack (Fixed in V0.1)
 - Go stdlib `net/http` with **Chi router** (`github.com/go-chi/chi/v5`)
@@ -82,7 +85,7 @@ Edit files in `internal/template/api/` — these are Go text/template files.
 3. Register the feature in `internal/cli/commands.go` in `newAddCommand()` (see `auth.AuthFeature{}, logging.LoggingFeature{}, swagger.SwaggerFeature{}`)
 
 ## CI Pipeline (`.github/workflows/ci.yml`)
-Runs on push/PR to main/master:
+Runs on push/PR to main/master (uses Go 1.22):
 1. `go mod download`
 2. `go vet ./...`
 3. `go test ./...`

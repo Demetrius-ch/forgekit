@@ -13,6 +13,7 @@ import (
 	"github.com/Demetrius-ch/forgekit/internal/dbinspect"
 	"github.com/Demetrius-ch/forgekit/internal/feature"
 	"github.com/Demetrius-ch/forgekit/internal/feature/auth"
+	"github.com/Demetrius-ch/forgekit/internal/feature/cors"
 	"github.com/Demetrius-ch/forgekit/internal/feature/logging"
 	"github.com/Demetrius-ch/forgekit/internal/feature/swagger"
 	"github.com/Demetrius-ch/forgekit/internal/generator"
@@ -873,7 +874,7 @@ func newAddCommand(g *globalFlags) *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			registry := feature.NewRegistry(auth.AuthFeature{}, logging.LoggingFeature{}, swagger.SwaggerFeature{})
+			registry := feature.NewRegistry(auth.AuthFeature{}, cors.CorsFeature{}, logging.LoggingFeature{}, swagger.SwaggerFeature{})
 
 			if list {
 				return runFeatureList(g, registry)

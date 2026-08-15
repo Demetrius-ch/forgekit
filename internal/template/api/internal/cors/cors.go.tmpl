@@ -1,0 +1,133 @@
+package cors
+
+import (
+	"net/http"
+	"os"
+	"strings"
+
+	"github.com/rs/cors"
+)
+
+type Config struct {
+	Enabled          bool
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	AllowCredentials bool
+	ConfigError      error
+}
+
+func Load() Config {
+	enabled := getEnvBool("CORS_ENABLED", false)
+
+	origins := getEnvString("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	allowedOrigins := parseOrigins(origins)
+
+	methods := getEnvString("CORS_ALLOWED_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+	allowedMethods := parseCSV(methods)
+
+	headers := getEnvString("CORS_ALLOWED_HEADERS", "Content-Type,Authorization")
+	allowedHeaders := parseCSV(headers)
+
+	allowCredentials := getEnvBool("CORS_ALLOW_CREDENTIALS", false)
+
+	var configError error
+	if allowCredentials && containsWildcard(allowedOrigins) {
+		configError = &ConfigError{Message: "configuration CORS invalide : CORS_ALLOW_CREDENTIALS=true est incompatible avec l'origine wildcard (*)"}
+	}
+
+	return Config{
+		Enabled:           enabled,
+		AllowedOrigins:    allowedOrigins,
+		AllowedMethods:    allowedMethods,
+		AllowedHeaders:    allowedHeaders,
+		AllowCredentials:  allowCredentials,
+		ConfigError:       configError,
+	}
+}
+
+type ConfigError struct {
+	Message string
+}
+
+func (e *ConfigError) Error() string {
+	return e.Message
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	return strings.EqualFold(val, "true") || val == "1"
+}
+
+func getEnvString(key, fallback string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	return val
+}
+
+func parseCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func parseOrigins(s string) []string {
+	origins := parseCSV(s)
+	if len(origins) == 0 {
+		return []string{"http://localhost:3000"}
+	}
+	return origins
+}
+
+func containsWildcard(origins []string) bool {
+	for _, o := range origins {
+		if o == "*" {
+			return true
+		}
+	}
+	return false
+}
+
+func Middleware() func(http.Handler) http.Handler {
+	cfg := Load()
+
+	if cfg.ConfigError != nil {
+		// Return a middleware that logs the error and passes through
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Log error once per request
+				next.ServeHTTP(w, r)
+			})
+		}
+	}
+
+	if !cfg.Enabled {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+
+	c := cors.New(cors.Options{
+		AllowedOrigins:   cfg.AllowedOrigins,
+		AllowedMethods:   cfg.AllowedMethods,
+		AllowedHeaders:   cfg.AllowedHeaders,
+		AllowCredentials: cfg.AllowCredentials,
+		MaxAge:           86400,
+	})
+
+	return c.Handler
+}

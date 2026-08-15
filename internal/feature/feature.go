@@ -7,6 +7,7 @@ type ProjectContext struct {
 	Root      string
 	Module    string
 	GoVersion string
+	HTTPPort  int
 }
 
 // Feature represents an installable ForgeKit feature.
