@@ -1,7 +1,7 @@
 # AGENTS.md — ForgeKit
 
 ## Project Overview
-ForgeKit is a Go CLI tool that generates production-ready REST APIs with hexagonal architecture. It scaffolds projects with PostgreSQL, Docker, migrations, tests, and provides `doctor`, `check`, `analyze` commands for validation.
+ForgeKit is a Go CLI tool that generates production-ready REST APIs with hexagonal architecture. It scaffolds projects with PostgreSQL, Docker, migrations, tests, and provides `doctor`, `check`, `analyze`, `inspect`, `config` commands for validation.
 
 ## Build & Test Commands
 
@@ -21,6 +21,7 @@ go test ./internal/cli/...
 go test ./internal/output/...
 go test ./internal/report/...
 go test ./internal/rules/...
+go test ./internal/forge/...
 
 # Run e2e tests (requires build tag)
 go test -tags=e2e ./internal/e2e/...
@@ -33,12 +34,13 @@ cd ci-api && go test ./...
 ## Key Architecture
 
 - **cmd/forge/main.go** — Entry point, delegates to `internal/cli`
-- **internal/cli/commands.go** — All CLI commands (init, add, doctor, check, analyze, config, version)
+- **internal/cli/commands.go** — All CLI commands (init, add, doctor, check, analyze, inspect, config, version)
 - **internal/cli/root.go** — Root command setup, global flags, branding
 - **internal/generator/** — Project generation logic (templates in `internal/template/`)
 - **internal/template/api/** — Go text/template files for generated project structure
 - **internal/feature/** — Feature registry for `forge add` (interface, detector, installer, registry)
 - **internal/feature/auth/** — JWT authentication feature implementation
+- **internal/feature/cors/** — CORS middleware feature implementation
 - **internal/feature/logging/** — Logging feature implementation
 - **internal/feature/swagger/** — Swagger/OpenAPI feature implementation
 - **internal/rules/** — Architectural rules for check/analyze (security, architecture, quality, environment, docker, config)
@@ -53,6 +55,7 @@ cd ci-api && go test ./...
 - **internal/template/** — Template rendering engine
 - **internal/ports/** — Port availability checking for generated projects
 - **internal/dbinspect/** — Database inspection (migrations, schema)
+- **internal/forge/** — Project signature validation, metadata, feature tracking (.forge/forge.yaml, .forge/features.yaml)
 - **pkg/generator/** — Shared generator types
 
 Note: `internal/doctor`, `internal/analyze`, `internal/arch`, `internal/project` are empty directories; `internal/check` does not exist; logic lives in `cli/commands.go` and `rules/`.
@@ -60,7 +63,7 @@ Note: `internal/doctor`, `internal/analyze`, `internal/arch`, `internal/project`
 ## Dependencies
 - `github.com/spf13/cobra` — CLI framework
 - `gopkg.in/yaml.v3` — YAML config parsing
-- Go 1.25+ (per go.mod), CI uses 1.22
+- Go 1.25 (per go.mod), CI uses 1.22
 
 ## Generated Project Stack (Fixed in V0.1)
 - Go stdlib `net/http` with **Chi router** (`github.com/go-chi/chi/v5`)
@@ -82,7 +85,7 @@ Edit files in `internal/template/api/` — these are Go text/template files.
 ### Add a new `forge add` feature
 1. Implement the `Feature` interface in `internal/feature/<name>/`
 2. Add template files in `internal/template/api/internal/<name>/`
-3. Register the feature in `internal/cli/commands.go` in `newAddCommand()` (see `auth.AuthFeature{}, logging.LoggingFeature{}, swagger.SwaggerFeature{}`)
+3. Register the feature in `internal/cli/commands.go` in `newAddCommand()` (see `auth.AuthFeature{}, cors.CorsFeature{}, logging.LoggingFeature{}, swagger.SwaggerFeature{}`)
 
 ## CI Pipeline (`.github/workflows/ci.yml`)
 Runs on push/PR to main/master (uses Go 1.22):

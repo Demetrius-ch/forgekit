@@ -1,0 +1,76 @@
+name: 💡 Feature Request
+description: Proposer une nouvelle fonctionnalité ou amélioration
+title: "[FEATURE] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de proposer une amélioration ! Décrivez votre idée ci-dessous.
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pré-requis
+      options:
+        - label: J'ai vérifié que cette fonctionnalité n'existe pas déjà
+          required: true
+        - label: J'ai vérifié les issues ouvertes/fermées pour éviter les doublons
+          required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Domaine concerné
+      options:
+        - forgekit-cli (nouvelles commandes, flags, UX)
+        - forgekit-generator (templates, structure projet)
+        - forgekit-feature/* (nouvelle feature `forge add`)
+        - forgekit-vscode (extension VS Code)
+        - forgekit-doctor/check/analyze (règles, détection)
+        - Documentation / Site web
+        - Autre
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problème à résoudre
+      description: Quel problème cette fonctionnalité résout-elle ?
+      placeholder: |
+        Actuellement, quand je fais X, je dois faire Y manuellement ce qui est fastidieux/impossible.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution proposée
+      description: Comment imaginez-vous l'implémentation ?
+      placeholder: |
+        Ajouter une commande `forge xyz` qui fait Z automatiquement.
+        Ou ajouter une option `--flag` à la commande existante.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives envisagées
+      description: Autres approches que vous avez considérées
+      placeholder: |
+        - Option A : ...
+        - Option B : ...
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexte additionnel
+      description: Mockups, exemples, liens vers issues similaires, etc.
+      placeholder: |
+        - Exemple d'API souhaitée
+        - Lien vers discussion liée
+        - ...
+  - type: checkboxes
+    id: willingness
+    attributes:
+      label: Disponibilité
+      options:
+        - label: Je suis prêt à contribuer au code (PR)
+        - label: Je peux tester la fonctionnalité quand elle sera prête
+        - label: Je peux aider à la documentation

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Demetrius-ch/forgekit/internal/engine"
+	"github.com/Demetrius-ch/forgekit/internal/forge"
 	"github.com/Demetrius-ch/forgekit/internal/template"
 )
 
@@ -86,6 +87,12 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 
 	if opts.DryRun {
 		return plan, nil
+	}
+
+	meta := forge.CreateInitialMetadata(opts.TargetDir, opts.ProjectName, opts.ModulePath, data.GoVersion)
+	if err := forge.SaveMetadata(opts.TargetDir, meta); err != nil {
+		_ = os.RemoveAll(opts.TargetDir)
+		return plan, fmt.Errorf("create forge metadata: %w", err)
 	}
 
 	if err := g.initGoMod(opts.TargetDir, opts.ModulePath, data.GoVersion); err != nil {

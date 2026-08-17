@@ -51,6 +51,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newInitCommand(g))
 	root.AddCommand(newVersionCommand(g))
 	root.AddCommand(newAddCommand(g))
+	root.AddCommand(newInspectCommand(g))
 	root.AddCommand(newDoctorCommand(g))
 	root.AddCommand(newAnalyzeCommand(g))
 	root.AddCommand(newCheckCommand(g))

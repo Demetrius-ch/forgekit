@@ -135,7 +135,7 @@ func (LoggingFeature) Apply(ctx context.Context, project feature.ProjectContext,
 		return fmt.Errorf("gofmt après intégration : %w", err)
 	}
 
-	if err := feature.AddInstalledFeature(project.Root, "logging", "1.0.0"); err != nil {
+	if err := feature.AddInstalledFeature(project.Root, "logging", LoggingFeature{}.Version()); err != nil {
 		return fmt.Errorf("enregistrer l'installation : %w", err)
 	}
 

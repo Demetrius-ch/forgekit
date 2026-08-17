@@ -102,6 +102,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    env_file:
+      - ../.env
     environment:
       HTTP_PORT: "{{ .HTTPPort }}"
       HTTP_ADDR: "0.0.0.0:{{ .HTTPPort }}"
@@ -123,6 +125,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    env_file:
+      - ../.env
     environment:
       HTTP_PORT: "{{ .HTTPPort }}"
       HTTP_ADDR: "0.0.0.0:{{ .HTTPPort }}"
@@ -147,6 +151,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    env_file:
+      - ../.env
     environment:
       HTTP_PORT: "{{ .HTTPPort }}"
       HTTP_ADDR: "0.0.0.0:{{ .HTTPPort }}"

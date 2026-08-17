@@ -16,6 +16,7 @@ import (
 	"github.com/Demetrius-ch/forgekit/internal/feature/cors"
 	"github.com/Demetrius-ch/forgekit/internal/feature/logging"
 	"github.com/Demetrius-ch/forgekit/internal/feature/swagger"
+	"github.com/Demetrius-ch/forgekit/internal/forge"
 	"github.com/Demetrius-ch/forgekit/internal/generator"
 	"github.com/Demetrius-ch/forgekit/internal/output"
 	"github.com/Demetrius-ch/forgekit/internal/ports"
@@ -657,7 +658,73 @@ func newDoctorCommand(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runReport(g, "doctor", root, rules.DoctorRules())
+			console := g.console()
+
+			sigResult := forge.ValidateSignature(root)
+
+			var spinner *output.Spinner
+			if g.Format == output.FormatHuman && !g.Quiet {
+				spinner = output.NewSpinner(console.Out)
+				spinner.Start("Vérification signature ForgeKit...")
+			}
+
+			var sigFindings []report.Finding
+			if sigResult.IsAbsent() {
+				sigFindings = append(sigFindings, report.Finding{
+					ID:       "forge.signature.absent",
+					Category: "forge",
+					Severity: report.SeverityCritical,
+					Message:  "Signature ForgeKit absente: répertoire .forge manquant",
+				})
+			} else if sigResult.IsInvalid() {
+				for _, e := range sigResult.Errors {
+					sigFindings = append(sigFindings, report.Finding{
+						ID:       "forge.signature.invalid",
+						Category: "forge",
+						Severity: report.SeverityCritical,
+						Message:  e,
+					})
+				}
+			} else {
+				sigFindings = append(sigFindings, report.Finding{
+					ID:       "forge.signature.valid",
+					Category: "forge",
+					Severity: report.SeverityInfo,
+					Message:  fmt.Sprintf("Signature ForgeKit valide (v%s, schema %d)", sigResult.Metadata.Version, sigResult.Metadata.Schema),
+				})
+				if sigResult.LegacyProject {
+					sigFindings = append(sigFindings, report.Finding{
+						ID:       "forge.signature.legacy",
+						Category: "forge",
+						Severity: report.SeverityWarning,
+						Message:  "Projet legacy: .forge/forge.yaml manquant, seules features.yaml présentes",
+					})
+				}
+				for _, w := range sigResult.Warnings {
+					sigFindings = append(sigFindings, report.Finding{
+						ID:       "forge.signature.warning",
+						Category: "forge",
+						Severity: report.SeverityWarning,
+						Message:  w,
+					})
+				}
+			}
+
+			if spinner != nil {
+				if sigResult.IsValid() {
+					spinner.Stop("✓ Signature ForgeKit — OK")
+				} else if sigResult.IsAbsent() {
+					spinner.Stop("✗ Signature ForgeKit — ABSENTE")
+				} else {
+					spinner.Stop("✗ Signature ForgeKit — INVALIDE")
+				}
+			}
+
+			reg := rules.DoctorRules()
+			if err := runReport(g, "doctor", root, reg, sigFindings); err != nil {
+				return err
+			}
+			return nil
 		},
 	}
 }
@@ -676,17 +743,80 @@ func newAnalyzeCommand(g *globalFlags) *cobra.Command {
 				return err
 			}
 			loader := rules.StaticConfigLoader{Rules: cfg.Architecture.Rules}
-			return runAnalyze(g, root, loader)
+
+			sigResult := forge.ValidateSignature(root)
+
+			var spinner *output.Spinner
+			console := g.console()
+			if g.Format == output.FormatHuman && !g.Quiet {
+				spinner = output.NewSpinner(console.Out)
+				spinner.Start("Vérification signature ForgeKit...")
+			}
+
+			var sigFindings []report.Finding
+			if sigResult.IsAbsent() {
+				sigFindings = append(sigFindings, report.Finding{
+					ID:       "forge.signature.absent",
+					Category: "forge",
+					Severity: report.SeverityCritical,
+					Message:  "Signature ForgeKit absente: répertoire .forge manquant",
+				})
+			} else if sigResult.IsInvalid() {
+				for _, e := range sigResult.Errors {
+					sigFindings = append(sigFindings, report.Finding{
+						ID:       "forge.signature.invalid",
+						Category: "forge",
+						Severity: report.SeverityCritical,
+						Message:  e,
+					})
+				}
+			} else {
+				sigFindings = append(sigFindings, report.Finding{
+					ID:       "forge.signature.valid",
+					Category: "forge",
+					Severity: report.SeverityInfo,
+					Message:  fmt.Sprintf("Signature ForgeKit valide (v%s, schema %d)", sigResult.Metadata.Version, sigResult.Metadata.Schema),
+				})
+				if sigResult.LegacyProject {
+					sigFindings = append(sigFindings, report.Finding{
+						ID:       "forge.signature.legacy",
+						Category: "forge",
+						Severity: report.SeverityWarning,
+						Message:  "Projet legacy: .forge/forge.yaml manquant, seules features.yaml présentes",
+					})
+				}
+				for _, w := range sigResult.Warnings {
+					sigFindings = append(sigFindings, report.Finding{
+						ID:       "forge.signature.warning",
+						Category: "forge",
+						Severity: report.SeverityWarning,
+						Message:  w,
+					})
+				}
+			}
+
+			if spinner != nil {
+				if sigResult.IsValid() {
+					spinner.Stop("✓ Signature ForgeKit — OK")
+				} else if sigResult.IsAbsent() {
+					spinner.Stop("✗ Signature ForgeKit — ABSENTE")
+				} else {
+					spinner.Stop("✗ Signature ForgeKit — INVALIDE")
+				}
+			}
+
+			return runAnalyze(g, root, loader, sigFindings)
 		},
 	}
 }
 
 // runAnalyze runs category-by-category analysis with per-step spinner and aggregates findings.
-func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader) error {
+func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, extraFindings []report.Finding) error {
 	console := g.console()
 
 	categories := []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"}
 	var allFindings []report.Finding
+	allFindings = append(allFindings, extraFindings...)
 	start := time.Now()
 
 	for _, cat := range categories {
@@ -807,8 +937,70 @@ func newCheckCommand(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			console := g.console()
+
+			sigResult := forge.ValidateSignature(root)
+
+			var spinner *output.Spinner
+			if g.Format == output.FormatHuman && !g.Quiet {
+				spinner = output.NewSpinner(console.Out)
+				spinner.Start("Vérification signature ForgeKit...")
+			}
+
+			var sigFindings []report.Finding
+			if sigResult.IsAbsent() {
+				sigFindings = append(sigFindings, report.Finding{
+					ID:       "forge.signature.absent",
+					Category: "forge",
+					Severity: report.SeverityCritical,
+					Message:  "Signature ForgeKit absente: répertoire .forge manquant",
+				})
+			} else if sigResult.IsInvalid() {
+				for _, e := range sigResult.Errors {
+					sigFindings = append(sigFindings, report.Finding{
+						ID:       "forge.signature.invalid",
+						Category: "forge",
+						Severity: report.SeverityCritical,
+						Message:  e,
+					})
+				}
+			} else {
+				sigFindings = append(sigFindings, report.Finding{
+					ID:       "forge.signature.valid",
+					Category: "forge",
+					Severity: report.SeverityInfo,
+					Message:  fmt.Sprintf("Signature ForgeKit valide (v%s, schema %d)", sigResult.Metadata.Version, sigResult.Metadata.Schema),
+				})
+				if sigResult.LegacyProject {
+					sigFindings = append(sigFindings, report.Finding{
+						ID:       "forge.signature.legacy",
+						Category: "forge",
+						Severity: report.SeverityWarning,
+						Message:  "Projet legacy: .forge/forge.yaml manquant, seules features.yaml présentes",
+					})
+				}
+				for _, w := range sigResult.Warnings {
+					sigFindings = append(sigFindings, report.Finding{
+						ID:       "forge.signature.warning",
+						Category: "forge",
+						Severity: report.SeverityWarning,
+						Message:  w,
+					})
+				}
+			}
+
+			if spinner != nil {
+				if sigResult.IsValid() {
+					spinner.Stop("✓ Signature ForgeKit — OK")
+				} else if sigResult.IsAbsent() {
+					spinner.Stop("✗ Signature ForgeKit — ABSENTE")
+				} else {
+					spinner.Stop("✗ Signature ForgeKit — INVALIDE")
+				}
+			}
+
 			loader := rules.StaticConfigLoader{Rules: cfg.Architecture.Rules}
-			if err := runReport(g, "check", root, rules.CheckRules(loader)); err != nil {
+			if err := runReport(g, "check", root, rules.CheckRules(loader), sigFindings); err != nil {
 				return err
 			}
 			// exit 1 handled by main via summary — re-check after print
@@ -817,7 +1009,7 @@ func newCheckCommand(g *globalFlags) *cobra.Command {
 	}
 }
 
-func runReport(g *globalFlags, command, root string, reg *rules.Registry) error {
+func runReport(g *globalFlags, command, root string, reg *rules.Registry, extraFindings ...[]report.Finding) error {
 	console := g.console()
 	var spinner *output.Spinner
 	if g.Format == output.FormatHuman && !g.Quiet {
@@ -838,6 +1030,11 @@ func runReport(g *globalFlags, command, root string, reg *rules.Registry) error 
 		output.Debug(os.Stderr, g.Debug, err)
 		return err
 	}
+
+	for _, extra := range extraFindings {
+		findings = append(extra, findings...)
+	}
+
 	res := report.Result{
 		Tool: app.Name, Version: app.Version, Command: command,
 		Project: root, Timestamp: start, Findings: findings,
@@ -1194,6 +1391,110 @@ func printFeaturePlan(g *globalFlags, plan feature.Plan) error {
 
 	return nil
 }
+
+func newInspectCommand(g *globalFlags) *cobra.Command {
+	return &cobra.Command{
+		Use:   "inspect",
+		Short: "Inspecter la signature ForgeKit du projet",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			console := g.console()
+
+			result := forge.ValidateSignature(root)
+
+			if g.Format == output.FormatJSON {
+				type inspectJSON struct {
+					Status   string                     `json:"status"`
+					Legacy   bool                       `json:"legacy"`
+					Metadata forge.ForgeMetadata        `json:"metadata"`
+					Features []feature.InstalledFeature `json:"features"`
+					Errors   []string                   `json:"errors"`
+					Warnings []string                   `json:"warnings"`
+				}
+				status := "valid"
+				if result.IsAbsent() {
+					status = "absent"
+				} else if result.IsInvalid() {
+					status = "invalid"
+				}
+				return console.PrintJSON(inspectJSON{
+					Status:   status,
+					Legacy:   result.LegacyProject,
+					Metadata: result.Metadata,
+					Features: result.Features.Features,
+					Errors:   result.Errors,
+					Warnings: result.Warnings,
+				})
+			}
+
+			if result.IsAbsent() {
+				fmt.Fprintln(console.Out, "ForgeKit")
+				fmt.Fprintln(console.Out, "────────────────────────────")
+				fmt.Fprintln(console.Out)
+				fmt.Fprintln(console.Out, "Signature: ABSENTE")
+				fmt.Fprintln(console.Out, "Ce n'est pas un projet ForgeKit (répertoire .forge manquant).")
+				return nil
+			}
+
+			if result.IsInvalid() {
+				fmt.Fprintln(console.Out, "ForgeKit")
+				fmt.Fprintln(console.Out, "────────────────────────────")
+				fmt.Fprintln(console.Out)
+				fmt.Fprintln(console.Out, "Signature: INVALIDE")
+				fmt.Fprintln(console.Out)
+				for _, e := range result.Errors {
+					fmt.Fprintf(console.Out, "  ✗ %s\n", e)
+				}
+				fmt.Fprintln(console.Out)
+				fmt.Fprintln(console.Out, "Exécutez 'forge doctor' pour plus de détails.")
+				return nil
+			}
+
+			fmt.Fprintln(console.Out, "ForgeKit")
+			fmt.Fprintln(console.Out, "────────────────────────────")
+			fmt.Fprintln(console.Out)
+			fmt.Fprintf(console.Out, "Project:      %s\n", result.Metadata.Project)
+			fmt.Fprintf(console.Out, "ForgeKit:     v%s\n", result.Metadata.Version)
+			fmt.Fprintf(console.Out, "Schema:       %d\n", result.Metadata.Schema)
+			fmt.Fprintf(console.Out, "Language:     %s\n", result.Metadata.Language)
+			fmt.Fprintf(console.Out, "Type:         %s\n", result.Metadata.Type)
+			if !result.Metadata.CreatedAt.IsZero() {
+				fmt.Fprintf(console.Out, "Created:      %s\n", result.Metadata.CreatedAt.Format("2006-01-02 15:04:05 UTC"))
+			}
+			fmt.Fprintln(console.Out)
+			if result.LegacyProject {
+				fmt.Fprintln(console.Out, "⚠ Projet legacy détecté (.forge/forge.yaml manquant, seules les features sont présentes)")
+				fmt.Fprintln(console.Out)
+			}
+			fmt.Fprintln(console.Out, "Features:")
+			if len(result.Features.Features) == 0 {
+				fmt.Fprintln(console.Out, "  (aucune)")
+			} else {
+				for _, f := range result.Features.Features {
+					fmt.Fprintf(console.Out, "  ✓ %s  v%s\n", f.Name, f.Version)
+				}
+			}
+			fmt.Fprintln(console.Out)
+			fmt.Fprintln(console.Out, "Signature:")
+			fmt.Fprintln(console.Out, "  ✓ Valide")
+			fmt.Fprintln(console.Out)
+			if len(result.Warnings) > 0 {
+				fmt.Fprintln(console.Out, "Avertissements:")
+				for _, w := range result.Warnings {
+					fmt.Fprintf(console.Out, "  ⚠ %s\n", w)
+				}
+				fmt.Fprintln(console.Out)
+			}
+			fmt.Fprintln(console.Out, "Créé avec ForgeKit")
+
+			return nil
+		},
+	}
+}
+
 func newConfigCommand(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{Use: "config", Short: "Gérer la configuration ForgeKit"}
 	cmd.AddCommand(&cobra.Command{

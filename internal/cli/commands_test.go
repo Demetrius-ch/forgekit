@@ -40,7 +40,7 @@ func TestRunReportJSON_NoSpinnerOrAnsi(t *testing.T) {
 
 	g := &globalFlags{Format: output.FormatJSON}
 	reg := rules.NewRegistry(fakeRule{})
-	err := runReport(g, "analyze", ".", reg)
+	err := runReport(g, "analyze", ".", reg, nil)
 	// close writer and read
 	_ = w.Close()
 	var buf []byte
@@ -96,7 +96,7 @@ func TestAnalyzeProgressScoresMatchFinalScore(t *testing.T) {
 	defer func() { os.Stdout = oldOut }()
 
 	go func() {
-		_ = runAnalyze(g, dir, loader)
+		_ = runAnalyze(g, dir, loader, nil)
 		_ = w.Close()
 	}()
 
@@ -156,7 +156,7 @@ func TestAnalyzeOptionalResourcesMissingWarnsButDoesNotFail(t *testing.T) {
 	defer func() { os.Stdout = oldOut }()
 
 	go func() {
-		_ = runAnalyze(g, dir, loader)
+		_ = runAnalyze(g, dir, loader, nil)
 		_ = w.Close()
 	}()
 

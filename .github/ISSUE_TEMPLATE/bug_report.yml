@@ -1,0 +1,93 @@
+name:  Bug Report
+description: Signaler un bug dans ForgeKit CLI ou l'extension VS Code
+title: "[BUG] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de signaler un bug ! Veuillez remplir les sections ci-dessous.
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pré-requis
+      options:
+        - label: J'ai vérifié que ce bug n'a pas déjà été signalé
+          required: true
+        - label: J'utilise la dernière version de ForgeKit
+          required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Composant concerné
+      options:
+        - forgekit-cli (binaire Go)
+        - forgekit-vscode (extension VS Code)
+        - forgekit-generator (génération de projet)
+        - forgekit-feature/* (feature spécifique)
+        - forgekit-doctor/check/analyze
+        - Autre
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version de ForgeKit
+      placeholder: "ex: 0.2.0 (ou sortie de `forge version`)"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Système d'exploitation
+      placeholder: "ex: Ubuntu 22.04, macOS 14, Windows 11"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description du bug
+      description: Décrivez clairement ce qui ne fonctionne pas
+      placeholder: |
+        Ce qui se passe :
+        Ce qui devrait se passer :
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Étapes de reproduction
+      description: Étapes minimales pour reproduire le bug
+      placeholder: |
+        1. `forge init test --non-interactive --module github.com/test/test`
+        2. `cd test`
+        3. `forge add cors`
+        4. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Sortie console
+      description: Collez la sortie complète (commande + erreur)
+      render: shell
+      placeholder: |
+        $ forge add cors
+        Error: ...
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexte additionnel
+      description: Informations supplémentaires (config, env, etc.)
+      placeholder: |
+        - Projet généré avec `forge init` version X
+        - Extension VS Code version Y
+        - ...
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Vérifications
+      options:
+        - label: Je peux reproduire le bug de manière cohérente
+        - label: J'ai testé avec la dernière version
+        - label: Ce n'est pas un problème de configuration locale (PATH, permissions, etc.)

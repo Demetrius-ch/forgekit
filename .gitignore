@@ -1,7 +1,5 @@
-
 11.md
 error.md
-
 explication.md
 projects.md
 
@@ -10,3 +8,7 @@ projects.md
 bin/
 dist/
 tmp/
+# VS Code Extension build artifacts
+integrations/vscode/node_modules/
+integrations/vscode/out/
+integrations/vscode/*.vsix

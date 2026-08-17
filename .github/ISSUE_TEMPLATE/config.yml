@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation ForgeKit
+    url: https://github.com/Demetrius-ch/forgekit/blob/main/README.md
+    about: Consultez la documentation avant de signaler un problème
+  - name: 💬 Discussions / Questions
+    url: https://github.com/Demetrius-ch/forgekit/discussions
+    about: Pour les questions générales, utilisez les Discussions GitHub
+  - name: 🔒 Signalement de sécurité
+    url: https://github.com/Demetrius-ch/forgekit/security/advisories/new
+    about: Signalez les vulnérabilités de sécurité de manière privée

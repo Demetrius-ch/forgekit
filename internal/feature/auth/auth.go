@@ -136,7 +136,7 @@ func (AuthFeature) Apply(ctx context.Context, project feature.ProjectContext, pl
 	}
 
 	// Record installation
-	if err := feature.AddInstalledFeature(project.Root, "auth", "1.0.0"); err != nil {
+	if err := feature.AddInstalledFeature(project.Root, "auth", AuthFeature{}.Version()); err != nil {
 		return fmt.Errorf("enregistrer l'installation : %w", err)
 	}
 
