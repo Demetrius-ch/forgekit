@@ -1,0 +1,104 @@
+{
+  "name": "forgekit-vscode",
+  "displayName": "ForgeKit for VS Code",
+  "description": "Official ForgeKit integration for VS Code. Provides project detection and project inspection.",
+  "version": "0.2.5",
+  "publisher": "forgekit",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "icon": "icons/forgekit-icon.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Demetrius-ch/forgekit"
+  },
+  "bugs": {
+    "url": "https://github.com/Demetrius-ch/forgekit/issues"
+  },
+  "keywords": [
+    "forgekit",
+    "go",
+    "backend",
+    "api",
+    "hexagonal"
+  ],
+  "activationEvents": [
+    "workspaceContains:.forge/forge.yaml",
+    "onCommand:forgekit.inspectProject",
+    "onCommand:forgekit.runDoctor"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "forgekit.inspectProject",
+        "title": "ForgeKit: Inspect Project",
+        "category": "ForgeKit"
+      },
+      {
+        "command": "forgekit.runDoctor",
+        "title": "ForgeKit: Run Doctor",
+        "category": "ForgeKit"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "forgekit",
+          "title": "ForgeKit",
+          "icon": "media/forgekit-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "forgekit": [
+        {
+          "id": "forgekit.projectView",
+          "name": "Project",
+          "type": "webview"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ForgeKit",
+      "properties": {
+        "forgekit.cliPath": {
+          "type": "string",
+          "default": "forge",
+          "description": "Path to the ForgeKit CLI executable"
+        },
+        "forgekit.autoDetect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect ForgeKit projects in workspace"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "test": "npm run compile && node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.10.0",
+    "@types/mocha": "^10.0.0",
+    "typescript": "^5.3.0",
+    "vscode-test": "^1.6.0",
+    "eslint": "^8.55.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {
+    "yaml": "^2.6.0"
+  }
+}
