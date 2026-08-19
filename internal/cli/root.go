@@ -8,6 +8,7 @@ import (
 
 	"github.com/Demetrius-ch/forgekit/internal/app"
 	"github.com/Demetrius-ch/forgekit/internal/output"
+	"github.com/Demetrius-ch/forgekit/internal/report"
 	"github.com/spf13/cobra"
 )
 
@@ -51,6 +52,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newInitCommand(g))
 	root.AddCommand(newVersionCommand(g))
 	root.AddCommand(newAddCommand(g))
+	root.AddCommand(newRemoveCommand(g))
 	root.AddCommand(newInspectCommand(g))
 	root.AddCommand(newDoctorCommand(g))
 	root.AddCommand(newAnalyzeCommand(g))
@@ -78,19 +80,21 @@ func newVersionCommand(g *globalFlags) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			console := g.console()
 
-			if console.Format == output.FormatJSON {
-				type versionInfo struct {
-					Name    string `json:"name"`
-					Version string `json:"version"`
-					Slogan  string `json:"slogan"`
-				}
-				_ = console.PrintJSON(versionInfo{
-					Name:    app.Name,
-					Version: app.Version,
-					Slogan:  "Build • Extend • Ship",
-				})
-				return
+if console.Format == output.FormatJSON {
+			type versionInfo struct {
+				SchemaVersion string `json:"schema_version"`
+				Name          string `json:"name"`
+				Version       string `json:"version"`
+				Slogan        string `json:"slogan"`
 			}
+			_ = console.PrintJSON(versionInfo{
+				SchemaVersion: report.JSONSchemaVersion,
+				Name:          app.Name,
+				Version:       app.Version,
+				Slogan:        "Build • Extend • Ship",
+			})
+			return
+		}
 
 			if !console.Quiet {
 				fmt.Fprintf(console.Out, "%s version %s\n", app.Name, app.Version)

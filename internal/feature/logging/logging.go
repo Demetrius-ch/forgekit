@@ -25,6 +25,11 @@ func (LoggingFeature) Version() string {
 	return "1.0.0"
 }
 
+// DependsOn returns the list of features this feature depends on.
+func (LoggingFeature) DependsOn() []string {
+	return []string{"auth"}
+}
+
 func (LoggingFeature) Check(ctx context.Context, project feature.ProjectContext) error {
 	installed, existing, err := feature.IsInstalled(project.Root, "logging")
 	if err != nil {
@@ -57,10 +62,12 @@ func (LoggingFeature) Plan(ctx context.Context, project feature.ProjectContext) 
 			{
 				Source:      "internal/logging/logger.go.tmpl",
 				Destination: "internal/logging/logger.go",
+				Action:      feature.FileActionCreate,
 			},
 			{
 				Source:      "internal/logging/middleware.go.tmpl",
 				Destination: "internal/logging/middleware.go",
+				Action:      feature.FileActionCreate,
 			},
 		},
 		Dependencies: []feature.Dependency{},
@@ -137,6 +144,45 @@ func (LoggingFeature) Apply(ctx context.Context, project feature.ProjectContext,
 
 	if err := feature.AddInstalledFeature(project.Root, "logging", LoggingFeature{}.Version()); err != nil {
 		return fmt.Errorf("enregistrer l'installation : %w", err)
+	}
+
+	return nil
+}
+
+// Remove uninstalls the logging feature.
+func (LoggingFeature) Remove(ctx context.Context, project feature.ProjectContext, plan feature.Plan) error {
+	// Remove files
+	for _, file := range plan.Files {
+		dest := filepath.Join(project.Root, file.Destination)
+		if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("supprimer %s : %w", dest, err)
+		}
+	}
+
+	// Remove empty directories if they exist
+	loggingDir := filepath.Join(project.Root, "internal", "logging")
+	if err := os.Remove(loggingDir); err != nil && !os.IsNotExist(err) {
+		// Directory not empty or other error, ignore
+	}
+
+	// Run go mod tidy
+	if err := feature.RunGoModTidy(project.Root); err != nil {
+		return fmt.Errorf("go mod tidy : %w", err)
+	}
+
+	// Run gofmt
+	if err := feature.RunGoFmt(project.Root); err != nil {
+		return fmt.Errorf("gofmt : %w", err)
+	}
+
+	// Remove environment variables from .env.example
+	if err := feature.RemoveEnvironment(project.Root, plan.Environment); err != nil {
+		return fmt.Errorf("supprimer les variables d'environnement : %w", err)
+	}
+
+	// Remove installation record
+	if err := feature.RemoveInstalledFeature(project.Root, "logging"); err != nil {
+		return fmt.Errorf("supprimer l'enregistrement d'installation : %w", err)
 	}
 
 	return nil

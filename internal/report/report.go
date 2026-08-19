@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+// JSONSchemaVersion is the current JSON output schema version.
+// Increment when making breaking changes to the JSON output format.
+const JSONSchemaVersion = "1"
+
 // Severity levels shared by doctor, analyze and check.
 type Severity string
 
@@ -47,14 +51,16 @@ type Finding struct {
 }
 
 // Result is the stable JSON schema for machine-readable output.
+// Used by analyze, doctor, check commands.
 type Result struct {
-	Tool      string    `json:"tool"`
-	Version   string    `json:"version"`
-	Command   string    `json:"command"`
-	Project   string    `json:"project,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
-	Summary   Summary   `json:"summary"`
-	Findings  []Finding `json:"findings"`
+	SchemaVersion string    `json:"schema_version"`
+	Tool          string    `json:"tool"`
+	Version       string    `json:"version"`
+	Command       string    `json:"command"`
+	Project       string    `json:"project,omitempty"`
+	Timestamp     time.Time `json:"timestamp"`
+	Summary       Summary   `json:"summary"`
+	Findings      []Finding `json:"findings"`
 }
 
 type Summary struct {

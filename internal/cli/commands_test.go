@@ -96,7 +96,7 @@ func TestAnalyzeProgressScoresMatchFinalScore(t *testing.T) {
 	defer func() { os.Stdout = oldOut }()
 
 	go func() {
-		_ = runAnalyze(g, dir, loader, nil)
+		_ = runAnalyze(g, dir, loader, nil, false)
 		_ = w.Close()
 	}()
 
@@ -156,7 +156,7 @@ func TestAnalyzeOptionalResourcesMissingWarnsButDoesNotFail(t *testing.T) {
 	defer func() { os.Stdout = oldOut }()
 
 	go func() {
-		_ = runAnalyze(g, dir, loader, nil)
+		_ = runAnalyze(g, dir, loader, nil, false)
 		_ = w.Close()
 	}()
 
@@ -296,5 +296,205 @@ func TestSelectPorts_DryRun(t *testing.T) {
 	}
 	if sel.HTTPPort != 18080 {
 		t.Errorf("expected HTTP port 18080, got %d", sel.HTTPPort)
+	}
+}
+
+func TestAddCommandPlanFlag(t *testing.T) {
+	// Create a minimal ForgeKit project structure
+	root := t.TempDir()
+
+	// Create go.mod
+	if err := os.WriteFile(
+		filepath.Join(root, "go.mod"),
+		[]byte("module github.com/test/test\n\ngo 1.25\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create .forge/features.yaml for legacy project
+	if err := os.MkdirAll(filepath.Join(root, ".forge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, ".forge", "features.yaml"),
+		[]byte("features: []\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create cmd/server directory
+	if err := os.MkdirAll(filepath.Join(root, "cmd", "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create required files for auth feature
+	if err := os.MkdirAll(filepath.Join(root, "internal", "transport", "http"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "internal", "transport", "http", "router.go"),
+		[]byte("package http\n\nimport \"github.com/go-chi/chi/v5\"\n\nfunc NewRouter() *chi.Mux {\n\tr := chi.NewRouter()\n\tr.Use(middleware.Timeout(30 * time.Second))\n\treturn r\n}\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Change to project directory
+	oldDir, _ := os.Getwd()
+	defer os.Chdir(oldDir)
+	os.Chdir(root)
+
+	// Capture output using the same method as other tests
+	out := captureRootOutput([]string{"add", "auth", "--plan"})
+	// Remove spinner characters
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	out = ansiRegex.ReplaceAllString(out, "")
+	spinnerChars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	for _, c := range spinnerChars {
+		out = strings.ReplaceAll(out, c, "")
+	}
+
+	if !strings.Contains(out, "ForgeKit Plan") {
+		t.Fatalf("expected 'ForgeKit Plan' in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Feature : auth") {
+		t.Fatalf("expected feature name in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Version : 1.0.0") {
+		t.Fatalf("expected feature version in output, got:\n%s", out)
+	}
+}
+
+func TestAddCommandPlanFlagJSON(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.WriteFile(
+		filepath.Join(root, "go.mod"),
+		[]byte("module github.com/test/test\n\ngo 1.25\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(root, ".forge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, ".forge", "features.yaml"),
+		[]byte("features: []\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(root, "cmd", "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(root, "internal", "transport", "http"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "internal", "transport", "http", "router.go"),
+		[]byte("package http\n\nimport \"github.com/go-chi/chi/v5\"\n\nfunc NewRouter() *chi.Mux {\n\tr := chi.NewRouter()\n\tr.Use(middleware.Timeout(30 * time.Second))\n\treturn r\n}\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	oldDir, _ := os.Getwd()
+	defer os.Chdir(oldDir)
+	os.Chdir(root)
+
+	// Capture output using the same method as other tests
+	out := captureRootOutput([]string{"add", "auth", "--plan", "--format=json"})
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("output not valid JSON: %v\n%s", err, out)
+	}
+
+	// Check schema_version
+	if result["schema_version"] != "1" {
+		t.Fatalf("expected schema_version=1, got %v", result["schema_version"])
+	}
+
+	plan, ok := result["plan"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected plan object, got %v", result["plan"])
+	}
+
+	if plan["Feature"] != "auth" {
+		t.Fatalf("expected Feature=auth, got %v", plan["Feature"])
+	}
+	if plan["Version"] != "1.0.0" {
+		t.Fatalf("expected Version=1.0.0, got %v", plan["Version"])
+	}
+	files, ok := plan["Files"].([]interface{})
+	if !ok || len(files) != 2 {
+		t.Fatalf("expected 2 files, got %v", files)
+	}
+	for _, f := range files {
+		fileMap := f.(map[string]interface{})
+		if fileMap["Action"] != "modify" && fileMap["Action"] != "create" {
+			t.Fatalf("expected Action to be modify or create, got %v", fileMap["Action"])
+		}
+	}
+}
+
+func TestAddCommandPlanFlagQuiet(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.WriteFile(
+		filepath.Join(root, "go.mod"),
+		[]byte("module github.com/test/test\n\ngo 1.25\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(root, ".forge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, ".forge", "features.yaml"),
+		[]byte("features: []\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(root, "cmd", "server"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(root, "internal", "transport", "http"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "internal", "transport", "http", "router.go"),
+		[]byte("package http\n\nimport \"github.com/go-chi/chi/v5\"\n\nfunc NewRouter() *chi.Mux {\n\tr := chi.NewRouter()\n\tr.Use(middleware.Timeout(30 * time.Second))\n\treturn r\n}\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	oldDir, _ := os.Getwd()
+	defer os.Chdir(oldDir)
+	os.Chdir(root)
+
+	// Capture output using the same method as other tests
+	out := captureRootOutput([]string{"add", "auth", "--plan", "--quiet"})
+	// Remove spinner characters
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	out = ansiRegex.ReplaceAllString(out, "")
+	spinnerChars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	for _, c := range spinnerChars {
+		out = strings.ReplaceAll(out, c, "")
+	}
+
+	if !strings.Contains(out, "CREATE") && !strings.Contains(out, "MODIFY") {
+		t.Fatalf("expected file actions in quiet output, got:\n%s", out)
 	}
 }

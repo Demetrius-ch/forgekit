@@ -1,5 +1,14 @@
 package feature
 
+// FileActionType represents the type of file operation.
+type FileActionType string
+
+const (
+	FileActionCreate FileActionType = "create"
+	FileActionModify FileActionType = "modify"
+	FileActionDelete FileActionType = "delete"
+)
+
 // Manifest describes the resources required by a feature.
 type Manifest struct {
 	Name         string
@@ -20,4 +29,11 @@ type Dependency struct {
 type FileAction struct {
 	Source      string
 	Destination string
+	Action      FileActionType
+}
+
+// Conflict describes a potential conflict during feature installation.
+type Conflict struct {
+	File        string
+	Description string
 }

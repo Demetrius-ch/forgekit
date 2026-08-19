@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -23,6 +24,11 @@ func (CorsFeature) Description() string {
 
 func (CorsFeature) Version() string {
 	return "1.0.2"
+}
+
+// DependsOn returns the list of features this feature depends on.
+func (CorsFeature) DependsOn() []string {
+	return []string{"auth"}
 }
 
 func (CorsFeature) Check(ctx context.Context, project feature.ProjectContext) error {
@@ -57,6 +63,7 @@ func (CorsFeature) Plan(ctx context.Context, project feature.ProjectContext) (fe
 			{
 				Source:      "internal/cors/cors.go.tmpl",
 				Destination: "internal/cors/cors.go",
+				Action:      feature.FileActionCreate,
 			},
 		},
 		Dependencies: []feature.Dependency{
@@ -131,6 +138,56 @@ func (CorsFeature) Apply(ctx context.Context, project feature.ProjectContext, pl
 
 	if err := feature.AddInstalledFeature(project.Root, "cors", CorsFeature{}.Version()); err != nil {
 		return fmt.Errorf("enregistrer l'installation : %w", err)
+	}
+
+	return nil
+}
+
+// Remove uninstalls the cors feature.
+func (CorsFeature) Remove(ctx context.Context, project feature.ProjectContext, plan feature.Plan) error {
+	// Remove files
+	for _, file := range plan.Files {
+		dest := filepath.Join(project.Root, file.Destination)
+		if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("supprimer %s : %w", dest, err)
+		}
+	}
+
+	// Remove empty directories if they exist
+	corsDir := filepath.Join(project.Root, "internal", "cors")
+	if err := os.Remove(corsDir); err != nil && !os.IsNotExist(err) {
+		// Directory not empty or other error, ignore
+	}
+
+	// Remove dependencies from go.mod
+	for _, dep := range plan.Dependencies {
+		cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
+		cmd.Dir = project.Root
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			// Log but continue - dependency might not be in go.mod
+		}
+	}
+
+	// Run go mod tidy
+	if err := feature.RunGoModTidy(project.Root); err != nil {
+		return fmt.Errorf("go mod tidy : %w", err)
+	}
+
+	// Run gofmt
+	if err := feature.RunGoFmt(project.Root); err != nil {
+		return fmt.Errorf("gofmt : %w", err)
+	}
+
+	// Remove environment variables from .env.example
+	if err := feature.RemoveEnvironment(project.Root, plan.Environment); err != nil {
+		return fmt.Errorf("supprimer les variables d'environnement : %w", err)
+	}
+
+	// Remove installation record
+	if err := feature.RemoveInstalledFeature(project.Root, "cors"); err != nil {
+		return fmt.Errorf("supprimer l'enregistrement d'installation : %w", err)
 	}
 
 	return nil

@@ -1,8 +1,8 @@
 # Contribuer à ForgeKit
 
-Merci de votre intérêt pour contribuer à ForgeKit ! 🎉
+Merci de votre intérêt pour contribuer à ForgeKit !
 
-## 🚀 Démarrage rapide
+## Démarrage rapide
 
 ```bash
 # Fork & clone
@@ -19,18 +19,18 @@ go test ./...
 go build -o forge ./cmd/forge
 ```
 
-## 📋 Types de contributions
+## Types de contributions
 
-| Type | Description |
-|------|-------------|
-| 🐛 **Bug fixes** | Corrections de bugs existants |
-| ✨ **Nouvelles features** | Nouvelles commandes, features `forge add`, etc. |
-| 📝 **Documentation** | README, guides, commentaires code |
-| 🧪 **Tests** | Tests unitaires, d'intégration, E2E |
-| 🔧 **Refactoring** | Amélioration code sans changement fonctionnel |
-| 🎨 **VS Code Extension** | Améliorations extension VS Code |
+| Type                   | Description                                     |
+| ---------------------- | ----------------------------------------------- |
+| **Bug fixes**          | Corrections de bugs existants                   |
+| **Nouvelles features** | Nouvelles commandes, features `forge add`, etc. |
+| **Documentation**      | README, guides, commentaires code               |
+| **Tests**              | Tests unitaires, d'intégration, E2E             |
+| **Refactoring**        | Amélioration code sans changement fonctionnel   |
+| **VS Code Extension**  | Améliorations extension VS Code                 |
 
-## ✅ Checklist avant PR
+## Checklist avant PR
 
 - [ ] Tests passent : `go test ./...`
 - [ ] Code formaté : `gofmt -w .`
@@ -40,7 +40,7 @@ go build -o forge ./cmd/forge
 - [ ] Messages de commit clairs (format conventional commits)
 - [ ] Documentation mise à jour si nécessaire
 
-## 🏷️ Format des commits
+##  Format des commits
 
 ```
 type(scope): description courte
@@ -53,6 +53,7 @@ Fixes #123
 **Types** : `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`
 
 **Exemples** :
+
 ```
 feat(generator): add support for custom templates
 fix(cli): handle missing go.mod gracefully
@@ -60,7 +61,7 @@ docs(readme): update installation instructions
 test(generator): add e2e test for custom module path
 ```
 
-## 🧪 Lancer les tests
+## Lancer les tests
 
 ```bash
 # Tous les tests
@@ -78,7 +79,7 @@ go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
 
-## 🔧 Ajouter une nouvelle feature `forge add`
+## Ajouter une nouvelle feature `forge add`
 
 1. Créer le dossier : `internal/feature/mafeature/`
 2. Implémenter l'interface `Feature` :
@@ -88,7 +89,7 @@ go tool cover -html=coverage.out
 4. Enregistrer dans `internal/cli/commands.go` dans `newAddCommand()`
 5. Tests : `go test ./internal/feature/mafeature/...`
 
-## 🎨 Extension VS Code
+## Extension VS Code
 
 Le code est dans `integrations/vscode/` :
 
@@ -100,29 +101,32 @@ npm run lint
 vsce package
 ```
 
-## 📝 Documentation
+## Documentation
 
 - `README.md` : Vue d'ensemble projet
 - `AGENTS.md` : Instructions pour agents IA
 - Commentaires de code : GoDoc sur fonctions publiques
 
-## 🐛 Signaler un bug
+## Signaler un bug
 
 Utilisez le template **Bug Report** sur GitHub Issues avec :
+
 - Version ForgeKit (`forge version`)
 - OS / Architecture
 - Étapes de reproduction minimales
 - Logs complets
 
-## 💡 Proposer une feature
+## Proposer une feature
 
 Utilisez le template **Feature Request** sur GitHub Issues.
 
-## 🔒 Sécurité
+## Sécurité
 
-Pour les vulnérabilités : [Security Advisories](https://github.com/Demetrius-ch/forgekit/security/advisories/new)
+Pour les vulnérabilités : [Security Advisories](
+   
+)
 
-## 📞 Contact
+## Contact
 
 - Issues GitHub : pour bugs/features
 - Discussions GitHub : pour questions/général
@@ -130,4 +134,4 @@ Pour les vulnérabilités : [Security Advisories](https://github.com/Demetrius-c
 
 ---
 
-**Merci de contribuer à ForgeKit !** 🙏
+**Merci de contribuer à ForgeKit !**

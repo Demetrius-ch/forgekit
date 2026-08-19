@@ -7,4 +7,5 @@ type Plan struct {
 	Files        []FileAction
 	Dependencies []Dependency
 	Environment  []string
+	Conflicts    []Conflict
 }

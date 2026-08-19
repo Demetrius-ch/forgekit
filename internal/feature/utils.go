@@ -155,3 +155,61 @@ func UpdateEnvironment(projectRoot string, envVars []string) error {
 
 	return nil
 }
+
+// RemoveEnvironment removes environment variables from .env.example.
+func RemoveEnvironment(projectRoot string, envVars []string) error {
+	if len(envVars) == 0 {
+		return nil
+	}
+
+	envPath := filepath.Join(projectRoot, ".env.example")
+
+	// Read existing content
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // File doesn't exist, nothing to do
+		}
+		return fmt.Errorf("lire .env.example : %w", err)
+	}
+
+	content := string(data)
+	lines := strings.Split(content, "\n")
+
+	// Build a set of keys to remove
+	keysToRemove := make(map[string]bool)
+	for _, env := range envVars {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) > 0 {
+			keysToRemove[strings.TrimSpace(parts[0])] = true
+		}
+	}
+
+	// Filter out lines with keys to remove
+	var newLines []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			newLines = append(newLines, line)
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) > 0 {
+			key := strings.TrimSpace(parts[0])
+			if keysToRemove[key] {
+				continue // Skip this line
+			}
+		}
+		newLines = append(newLines, line)
+	}
+
+	newContent := strings.Join(newLines, "\n")
+	// Ensure no trailing empty lines beyond one
+	newContent = strings.TrimRight(newContent, "\n") + "\n"
+
+	if err := os.WriteFile(envPath, []byte(newContent), 0o644); err != nil {
+		return fmt.Errorf("écrire .env.example : %w", err)
+	}
+
+	return nil
+}

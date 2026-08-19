@@ -9,29 +9,71 @@ import (
 	"strings"
 )
 
+// ProjectType represents the type of project detected.
+type ProjectType int
+
+const (
+	ProjectTypeUnknown ProjectType = iota
+	ProjectTypeForgeKit
+	ProjectTypeLegacyForgeKit
+	ProjectTypeExternalCompatible
+	ProjectTypeInvalidForgeKit
+)
+
+// ProjectContext describes the ForgeKit project receiving a feature.
+type ProjectContext struct {
+	Root      string
+	Module    string
+	GoVersion string
+	HTTPPort  int
+	Type      ProjectType
+}
+
 // Detector detects and loads information about a ForgeKit project.
 type Detector struct{}
 
 // Detect inspects the project root and returns its context.
+// Strict mode: requires ForgeKit project structure (.forge or legacy features.yaml).
 func (Detector) Detect(root string) (ProjectContext, error) {
+	ctx, ptype := detectProject(root, false)
+	ctx.Type = ptype
+	if ptype == ProjectTypeInvalidForgeKit || ptype == ProjectTypeUnknown {
+		return ctx, fmt.Errorf("projet ForgeKit invalide ou non détecté")
+	}
+	return ctx, nil
+}
+
+// DetectLoose inspects the project root and returns its context.
+// Loose mode: accepts ForgeKit projects, legacy projects, and external compatible Go projects.
+func (Detector) DetectLoose(root string) (ProjectContext, error) {
+	ctx, ptype := detectProject(root, true)
+	ctx.Type = ptype
+	if ptype == ProjectTypeUnknown {
+		return ctx, fmt.Errorf("projet Go non détecté")
+	}
+	return ctx, nil
+}
+
+// detectProject performs the actual detection logic.
+func detectProject(root string, loose bool) (ProjectContext, ProjectType) {
 	root = strings.TrimSpace(root)
 
 	if root == "" {
-		return ProjectContext{}, fmt.Errorf("le répertoire du projet ne peut pas être vide")
+		return ProjectContext{}, ProjectTypeUnknown
 	}
 
 	root, err := filepath.Abs(root)
 	if err != nil {
-		return ProjectContext{}, fmt.Errorf("résoudre le répertoire du projet : %w", err)
+		return ProjectContext{}, ProjectTypeUnknown
 	}
 
 	info, err := os.Stat(root)
 	if err != nil {
-		return ProjectContext{}, fmt.Errorf("projet introuvable : %w", err)
+		return ProjectContext{}, ProjectTypeUnknown
 	}
 
 	if !info.IsDir() {
-		return ProjectContext{}, fmt.Errorf("le projet n'est pas un répertoire")
+		return ProjectContext{}, ProjectTypeUnknown
 	}
 
 	goModPath := filepath.Join(root, "go.mod")
@@ -39,29 +81,47 @@ func (Detector) Detect(root string) (ProjectContext, error) {
 	data, err := os.ReadFile(goModPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return ProjectContext{}, fmt.Errorf("go.mod absent : projet Go non détecté")
+			return ProjectContext{}, ProjectTypeUnknown
 		}
-
-		return ProjectContext{}, fmt.Errorf("lire go.mod : %w", err)
+		return ProjectContext{}, ProjectTypeUnknown
 	}
 
 	module := parseModule(data)
 	if module == "" {
-		return ProjectContext{}, fmt.Errorf("module Go introuvable dans go.mod")
+		return ProjectContext{}, ProjectTypeUnknown
 	}
 
 	goVersion := parseGoVersion(data)
 
-	if _, err := os.Stat(filepath.Join(root, "forge.yaml")); err != nil {
-		if !os.IsNotExist(err) {
-			return ProjectContext{}, fmt.Errorf("vérifier forge.yaml : %w", err)
-		}
+	// Check for ForgeKit signature
+	forgeDir := filepath.Join(root, ".forge")
+	_, forgeDirErr := os.Stat(forgeDir)
+	_, forgeYamlErr := os.Stat(filepath.Join(forgeDir, "forge.yaml"))
+	_, featuresYamlErr := os.Stat(filepath.Join(forgeDir, "features.yaml"))
+
+	hasForgeDir := forgeDirErr == nil
+	hasForgeYaml := forgeYamlErr == nil
+	hasFeaturesYaml := featuresYamlErr == nil
+
+	// Check for ForgeKit structure
+	hasCmdServer := true
+	if _, err := os.Stat(filepath.Join(root, "cmd", "server")); err != nil {
+		hasCmdServer = false
 	}
 
-	if _, err := os.Stat(filepath.Join(root, "cmd", "server")); err != nil {
-		if !os.IsNotExist(err) {
-			return ProjectContext{}, fmt.Errorf("vérifier cmd/server : %w", err)
-		}
+	var ptype ProjectType
+
+	if hasForgeDir && hasForgeYaml {
+		ptype = ProjectTypeForgeKit
+	} else if hasForgeDir && hasFeaturesYaml && !hasForgeYaml {
+		ptype = ProjectTypeLegacyForgeKit
+	} else if loose && hasCmdServer {
+		// External compatible: has Go module + cmd/server structure
+		ptype = ProjectTypeExternalCompatible
+	} else if hasForgeDir && !hasForgeYaml && !hasFeaturesYaml {
+		ptype = ProjectTypeInvalidForgeKit
+	} else {
+		ptype = ProjectTypeUnknown
 	}
 
 	httpPort := readHTTPPort(root)
@@ -71,7 +131,8 @@ func (Detector) Detect(root string) (ProjectContext, error) {
 		Module:    module,
 		GoVersion: goVersion,
 		HTTPPort:  httpPort,
-	}, nil
+		Type:      ptype,
+	}, ptype
 }
 
 func readHTTPPort(root string) int {

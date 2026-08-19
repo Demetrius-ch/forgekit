@@ -3,6 +3,8 @@ package errs
 import (
 	"errors"
 	"fmt"
+
+	"github.com/Demetrius-ch/forgekit/internal/cli"
 )
 
 // Code identifies error categories for exit status mapping.
@@ -77,6 +79,11 @@ func ExitCode(err error) int {
 		default:
 			return 1
 		}
+	}
+	// Check for CI mode error with explicit exit code
+	var ciErr *cli.CiError
+	if errors.As(err, &ciErr) {
+		return ciErr.Code
 	}
 	return 1
 }

@@ -3,7 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -730,7 +732,9 @@ func newDoctorCommand(g *globalFlags) *cobra.Command {
 }
 
 func newAnalyzeCommand(g *globalFlags) *cobra.Command {
-	return &cobra.Command{
+	var ciMode bool
+
+	cmd := &cobra.Command{
 		Use:   "analyze",
 		Short: "Analyser la structure et les pratiques du projet",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -748,7 +752,7 @@ func newAnalyzeCommand(g *globalFlags) *cobra.Command {
 
 			var spinner *output.Spinner
 			console := g.console()
-			if g.Format == output.FormatHuman && !g.Quiet {
+			if g.Format == output.FormatHuman && !g.Quiet && !ciMode {
 				spinner = output.NewSpinner(console.Out)
 				spinner.Start("Vérification signature ForgeKit...")
 			}
@@ -805,14 +809,30 @@ func newAnalyzeCommand(g *globalFlags) *cobra.Command {
 				}
 			}
 
-			return runAnalyze(g, root, loader, sigFindings)
+			return runAnalyze(g, root, loader, sigFindings, ciMode)
 		},
 	}
+
+	cmd.Flags().BoolVar(
+		&ciMode,
+		"ci",
+		false,
+		"Mode CI/CD: non-interactif, déterministe, codes de sortie 0/1/2, sans spinners",
+	)
+
+	return cmd
 }
 
 // runAnalyze runs category-by-category analysis with per-step spinner and aggregates findings.
-func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, extraFindings []report.Finding) error {
+// ciMode enables CI/CD mode: no spinners, deterministic output, proper exit codes.
+func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, extraFindings []report.Finding, ciMode bool) error {
 	console := g.console()
+
+	// In CI mode, force quiet and human format for compact output
+	if ciMode {
+		g.Quiet = true
+		g.Format = output.FormatHuman
+	}
 
 	categories := []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"}
 	var allFindings []report.Finding
@@ -820,9 +840,9 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 	start := time.Now()
 
 	for _, cat := range categories {
-		// spinner per category (human only)
+		// spinner per category (human only, not in CI mode)
 		var spinner *output.Spinner
-		if g.Format == output.FormatHuman && !g.Quiet {
+		if g.Format == output.FormatHuman && !g.Quiet && !ciMode {
 			spinner = output.NewSpinner(console.Out)
 			spinner.Start("Analyse " + cat + "...")
 		}
@@ -867,10 +887,26 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 				final = "✗ " + cat + " — " + fmt.Sprintf("%d/100", s)
 			}
 			spinner.Stop(final)
+		} else if ciMode && g.Format == output.FormatHuman {
+			// In CI mode, print compact category status
+			temp := report.Result{Project: root, Findings: append(append([]report.Finding(nil), allFindings...), findings...)}
+			score := report.ComputeScore(temp)
+			s := score.Categories[cat]
+			status := "PASS"
+			if err != nil {
+				status = "ERROR"
+			} else if s < 60 {
+				status = "FAIL"
+			}
+			fmt.Fprintf(console.Out, "[%s] %s: %d/100\n", status, cat, s)
 		}
 
 		if err != nil {
 			output.Debug(os.Stderr, g.Debug, err)
+			// In CI mode, return error with exit code 2
+			if ciMode {
+				return &CiError{Code: 2, Err: err}
+			}
 			return err
 		}
 		allFindings = append(allFindings, findings...)
@@ -878,15 +914,88 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 
 	// aggregate and print result
 	allFindings = report.UniqueFindings(allFindings)
-	res := report.Result{Tool: app.Name, Version: app.Version, Command: "analyze", Project: root, Timestamp: start, Findings: allFindings}
-	res.Summary = report.BuildSummary(allFindings)
-	if err := console.PrintResult(res); err != nil {
-		return err
+	res := report.Result{
+		SchemaVersion: report.JSONSchemaVersion,
+		Tool:          app.Name,
+		Version:       app.Version,
+		Command:       "analyze",
+		Project:       root,
+		Timestamp:     start,
+		Findings:      allFindings,
 	}
+	res.Summary = report.BuildSummary(allFindings)
+
+	// In CI mode, print compact summary
+	if ciMode && g.Format == output.FormatHuman {
+		printCiSummary(console.Out, res)
+	} else {
+		if err := console.PrintResult(res); err != nil {
+			return err
+		}
+	}
+
+	// Determine exit code
+	hasErrors := res.Summary.Error > 0 || res.Summary.Critical > 0
+	hasWarnings := res.Summary.Warning > 0
+
+	if ciMode {
+		if hasErrors {
+			return &CiError{Code: 1, Err: fmt.Errorf("diagnostics en échec : %d error(s), %d warning(s)", res.Summary.Error+res.Summary.Critical, res.Summary.Warning)}
+		}
+		if hasWarnings {
+			return &CiError{Code: 1, Err: fmt.Errorf("warnings détectés : %d warning(s)", res.Summary.Warning)}
+		}
+		return &CiError{Code: 0, Err: nil}
+	}
+
 	if report.HasFailures(res.Summary) {
 		return fmt.Errorf("diagnostics en échec : %d error(s)", res.Summary.Error+res.Summary.Critical)
 	}
 	return nil
+}
+
+// CiError wraps an error with an exit code for CI mode.
+type CiError struct {
+	Code int
+	Err  error
+}
+
+func (e *CiError) Error() string {
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return ""
+}
+
+// printCiSummary prints a compact summary suitable for CI output.
+func printCiSummary(out io.Writer, res report.Result) {
+	fmt.Fprintf(out, "ForgeKit Analyze — %s\n", res.Project)
+	fmt.Fprintf(out, "Version: %s | Timestamp: %s\n", res.Version, res.Timestamp.Format(time.RFC3339))
+	fmt.Fprintf(out, "Summary: pass=%d info=%d warning=%d error=%d critical=%d\n",
+		res.Summary.Pass, res.Summary.Info, res.Summary.Warning, res.Summary.Error, res.Summary.Critical)
+
+	// Print category scores
+	score := report.ComputeScore(res)
+	categories := []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"}
+	for _, cat := range categories {
+		s := score.Categories[cat]
+		status := "PASS"
+		if s < 60 {
+			status = "FAIL"
+		}
+		fmt.Fprintf(out, "  [%s] %s: %d/100\n", status, cat, s)
+	}
+
+	// Print warnings and errors
+	for _, f := range res.Findings {
+		if f.Severity == report.SeverityWarning || f.Severity == report.SeverityError || f.Severity == report.SeverityCritical {
+			loc := ""
+			if f.File != "" {
+				loc = fmt.Sprintf(" (%s)", f.File)
+			}
+			fmt.Fprintf(out, "  %s: %s%s\n", strings.ToUpper(string(f.Severity)), f.Message, loc)
+		}
+	}
 }
 
 // detectTests returns findings about tests presence.
@@ -1036,8 +1145,13 @@ func runReport(g *globalFlags, command, root string, reg *rules.Registry, extraF
 	}
 
 	res := report.Result{
-		Tool: app.Name, Version: app.Version, Command: command,
-		Project: root, Timestamp: start, Findings: findings,
+		SchemaVersion: report.JSONSchemaVersion,
+		Tool:          app.Name,
+		Version:       app.Version,
+		Command:       command,
+		Project:       root,
+		Timestamp:     start,
+		Findings:      findings,
 	}
 	res.Summary = report.BuildSummary(findings)
 	if err := console.PrintResult(res); err != nil {
@@ -1052,6 +1166,7 @@ func runReport(g *globalFlags, command, root string, reg *rules.Registry, extraF
 func newAddCommand(g *globalFlags) *cobra.Command {
 	var list bool
 	var dryRun bool
+	var showPlan bool
 
 	cmd := &cobra.Command{
 		Use:   "add [feature]",
@@ -1077,7 +1192,7 @@ func newAddCommand(g *globalFlags) *cobra.Command {
 				return runFeatureList(g, registry)
 			}
 
-			return runFeatureAdd(g, registry, args[0], dryRun)
+			return runFeatureAdd(g, registry, args[0], dryRun, showPlan)
 		},
 	}
 
@@ -1095,6 +1210,41 @@ func newAddCommand(g *globalFlags) *cobra.Command {
 		"Afficher le plan sans modifier le projet",
 	)
 
+	cmd.Flags().BoolVar(
+		&showPlan,
+		"plan",
+		false,
+		"Afficher le plan d'installation détaillé (fichiers à créer/modifier/supprimer, conflits, dépendances)",
+	)
+
+	return cmd
+}
+
+func newRemoveCommand(g *globalFlags) *cobra.Command {
+	var showPlan bool
+
+	cmd := &cobra.Command{
+		Use:   "remove [feature]",
+		Short: "Supprimer une fonctionnalité du projet",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return fmt.Errorf("une feature est requise, par exemple : forge remove auth")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			registry := feature.NewRegistry(auth.AuthFeature{}, cors.CorsFeature{}, logging.LoggingFeature{}, swagger.SwaggerFeature{})
+			return runFeatureRemove(g, registry, args[0], showPlan)
+		},
+	}
+
+	cmd.Flags().BoolVar(
+		&showPlan,
+		"plan",
+		false,
+		"Afficher le plan de suppression sans modifier le projet",
+	)
+
 	return cmd
 }
 
@@ -1109,6 +1259,11 @@ func runFeatureList(g *globalFlags, registry *feature.Registry) error {
 			Description string `json:"description"`
 		}
 
+		type featureListWithSchema struct {
+			SchemaVersion string       `json:"schema_version"`
+			Features      []featureJSON `json:"features"`
+		}
+
 		result := make([]featureJSON, 0, len(features))
 
 		for _, f := range features {
@@ -1119,7 +1274,10 @@ func runFeatureList(g *globalFlags, registry *feature.Registry) error {
 			})
 		}
 
-		return console.PrintJSON(result)
+		return console.PrintJSON(featureListWithSchema{
+			SchemaVersion: report.JSONSchemaVersion,
+			Features:      result,
+		})
 	}
 
 	if len(features) == 0 {
@@ -1157,6 +1315,7 @@ func runFeatureAdd(
 	registry *feature.Registry,
 	name string,
 	dryRun bool,
+	showPlan bool,
 ) error {
 	console := g.console()
 
@@ -1213,47 +1372,56 @@ func runFeatureAdd(
 
 	ctx := context.Background()
 
-	// Step 3: Check prerequisites
+	// Step 3: Resolve and check dependencies
 	if g.Format == output.FormatHuman && !g.Quiet {
 		spinner = output.NewSpinner(console.Out)
-		spinner.Start("Vérification des prérequis...")
+		spinner.Start("Résolution des dépendances...")
 	}
 
-	checkErr := f.Check(ctx, project)
-	alreadyInstalled := checkErr != nil && strings.Contains(checkErr.Error(), "déjà installée")
-	if checkErr != nil {
-		if spinner != nil {
-			if alreadyInstalled {
-				spinner.Stop("✓ Feature déjà installée")
-			} else {
-				spinner.Stop("✗ Vérification des prérequis — échec")
-			}
-		}
-		// In dry-run mode, treat "already installed" as a special case
-		if dryRun && alreadyInstalled {
-			// Show already installed message for dry-run
-			if g.Format == output.FormatHuman && !g.Quiet {
-				fmt.Fprintln(console.Out)
-				fmt.Fprintln(console.Out, "Dry-run")
-				fmt.Fprintln(console.Out, "────────────────────────────────")
-				fmt.Fprintln(console.Out)
-				fmt.Fprintln(console.Out, "Aucune modification ne sera effectuée.")
-				fmt.Fprintf(console.Out, "Feature : %s\n", name)
-				// Extract version from error message
-				version := strings.TrimPrefix(strings.TrimPrefix(checkErr.Error(), "vérification de la feature "), name+" version ")
-				version = strings.TrimSuffix(version, " déjà installée")
-				fmt.Fprintf(console.Out, "Version installée : %s\n", version)
-				fmt.Fprintln(console.Out, "Statut : aucune modification nécessaire.")
-			}
-			return nil
-		}
-		return fmt.Errorf("vérification de la feature %q : %w", name, checkErr)
-	}
+	// Get all features to install (including dependencies)
+	featuresToInstall, err := registry.ResolveDependencies([]string{name})
 	if spinner != nil {
-		spinner.Stop("✓ Prérequis validés")
+		if err != nil {
+			spinner.Stop("✗ Résolution des dépendances — échec")
+		} else {
+			spinner.Stop("✓ Dépendances résolues")
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("résolution des dépendances : %w", err)
 	}
 
-	// Step 4: Build plan
+	// Step 4: Check prerequisites for all features (dependencies first)
+	for _, feat := range featuresToInstall {
+		if g.Format == output.FormatHuman && !g.Quiet {
+			spinner = output.NewSpinner(console.Out)
+			spinner.Start(fmt.Sprintf("Vérification des prérequis pour %q...", feat.Name()))
+		}
+
+		checkErr := feat.Check(ctx, project)
+		alreadyInstalled := checkErr != nil && strings.Contains(checkErr.Error(), "déjà installée")
+		if checkErr != nil {
+			if spinner != nil {
+				if alreadyInstalled {
+					spinner.Stop(fmt.Sprintf("✓ Feature %q déjà installée", feat.Name()))
+				} else {
+					spinner.Stop(fmt.Sprintf("✗ Vérification des prérequis pour %q — échec", feat.Name()))
+				}
+			}
+			if alreadyInstalled {
+				if dryRun || showPlan {
+					continue // In dry-run/plan mode, just show message and continue
+				}
+				return fmt.Errorf("feature %q déjà installée", feat.Name())
+			}
+			return fmt.Errorf("vérification de la feature %q : %w", feat.Name(), checkErr)
+		}
+		if spinner != nil {
+			spinner.Stop(fmt.Sprintf("✓ Prérequis validés pour %q", feat.Name()))
+		}
+	}
+
+	// Step 5: Build plan for the main feature (dependencies will be installed first)
 	if g.Format == output.FormatHuman && !g.Quiet {
 		spinner = output.NewSpinner(console.Out)
 		spinner.Start("Construction du plan...")
@@ -1271,29 +1439,77 @@ func runFeatureAdd(
 		return fmt.Errorf("construction du plan pour %q : %w", name, err)
 	}
 
-	if dryRun {
+	// Detect conflicts
+	if err := detectConflicts(project.Root, &plan); err != nil {
+		return fmt.Errorf("détection des conflits : %w", err)
+	}
+
+	if dryRun || showPlan {
 		if g.Format == output.FormatHuman && !g.Quiet {
 			fmt.Fprintln(console.Out)
 		}
-		return printFeaturePlan(g, plan)
+		return printFeaturePlan(g, plan, dryRun, showPlan)
 	}
 
-	// Step 5: Install files
+	// Step 5: Install all features in order (dependencies first)
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
 		fmt.Fprintln(console.Out, "Installation...")
-		spinner = output.NewSpinner(console.Out)
-		spinner.Start("Installation des fichiers...")
 	}
 
-	if err := f.Apply(ctx, project, plan); err != nil {
-		if spinner != nil {
-			spinner.Stop("✗ Installation — échec")
-		}
-		return err
+	// Create snapshot for rollback
+	snapshot, err := createInstallSnapshot(project.Root)
+	if err != nil {
+		return fmt.Errorf("créer snapshot pour rollback: %w", err)
 	}
-	if spinner != nil {
-		spinner.Stop("✓ Fichiers installés")
+
+	// Install each feature in order
+	for _, feat := range featuresToInstall {
+		// Check if already installed
+		installed, _, _ := feature.IsInstalled(project.Root, feat.Name())
+		if installed {
+			if g.Format == output.FormatHuman && !g.Quiet {
+				fmt.Fprintf(console.Out, "  ✓ %s déjà installé, ignoré\n", feat.Name())
+			}
+			continue
+		}
+
+		if g.Format == output.FormatHuman && !g.Quiet {
+			spinner = output.NewSpinner(console.Out)
+			spinner.Start(fmt.Sprintf("Installation de %s...", feat.Name()))
+		}
+
+		featPlan, err := feat.Plan(ctx, project)
+		if err != nil {
+			// Rollback on error
+			if rollbackErr := restoreInstallSnapshot(project.Root, snapshot); rollbackErr != nil {
+				return fmt.Errorf("installation de %s échouée: %w; rollback aussi échoué: %v", feat.Name(), err, rollbackErr)
+			}
+			return fmt.Errorf("plan pour %s: %w", feat.Name(), err)
+		}
+
+		if err := detectConflicts(project.Root, &featPlan); err != nil {
+			if rollbackErr := restoreInstallSnapshot(project.Root, snapshot); rollbackErr != nil {
+				return fmt.Errorf("conflits pour %s: %w; rollback aussi échoué: %v", feat.Name(), err, rollbackErr)
+			}
+			return fmt.Errorf("détection conflits pour %s: %w", feat.Name(), err)
+		}
+
+		if err := feat.Apply(ctx, project, featPlan); err != nil {
+			// Rollback on error
+			if rollbackErr := restoreInstallSnapshot(project.Root, snapshot); rollbackErr != nil {
+				return fmt.Errorf("installation de %s échouée: %w; rollback aussi échoué: %v", feat.Name(), err, rollbackErr)
+			}
+			return fmt.Errorf("installation de %s: %w", feat.Name(), err)
+		}
+
+		if spinner != nil {
+			spinner.Stop(fmt.Sprintf("✓ %s installé", feat.Name()))
+		}
+	}
+
+	if g.Format == output.FormatHuman && !g.Quiet && spinner == nil {
+		fmt.Fprintln(console.Out, "  ✓ Fichiers installés")
 	}
 
 	// Step 6: Dependencies (handled in Apply)
@@ -1322,18 +1538,313 @@ func runFeatureAdd(
 	return nil
 }
 
-func printFeaturePlan(g *globalFlags, plan feature.Plan) error {
+func runFeatureRemove(
+	g *globalFlags,
+	registry *feature.Registry,
+	name string,
+	showPlan bool,
+) error {
+	console := g.console()
+
+	root, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	// Step 1: Detect project
+	if g.Format == output.FormatHuman && !g.Quiet {
+		fmt.Fprintln(console.Out, "ForgeKit Remove")
+		fmt.Fprintln(console.Out, "────────────────────────────────")
+		fmt.Fprintln(console.Out)
+	}
+
+	var spinner *output.Spinner
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Détection du projet...")
+	}
+
+	detector := feature.Detector{}
+
+	project, err := detector.Detect(root)
+	if spinner != nil {
+		if err != nil {
+			spinner.Stop("✗ Détection du projet — erreur")
+		} else {
+			spinner.Stop("✓ Projet ForgeKit détecté")
+		}
+	}
+	if err != nil {
+		output.Debug(os.Stderr, g.Debug, err)
+		return err
+	}
+
+	// Step 2: Find feature
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Recherche de la feature...")
+	}
+
+	f, err := registry.Require(name)
+	if spinner != nil {
+		if err != nil {
+			spinner.Stop("✗ Feature non trouvée")
+		} else {
+			spinner.Stop(fmt.Sprintf("✓ Feature %q trouvée", name))
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	// Check if feature is installed
+	installed, _, err := feature.IsInstalled(project.Root, name)
+	if err != nil {
+		return fmt.Errorf("vérifier l'installation : %w", err)
+	}
+	if !installed {
+		return fmt.Errorf("feature %q n'est pas installée", name)
+	}
+
+	// Check reverse dependencies (features that depend on this one)
+	var dependentFeatures []string
+	for _, feat := range registry.List() {
+		if fd, ok := feat.(feature.FeatureDependencies); ok {
+			for _, dep := range fd.DependsOn() {
+				if dep == name {
+					// Check if this dependent feature is installed
+					depInstalled, _, _ := feature.IsInstalled(project.Root, feat.Name())
+					if depInstalled {
+						dependentFeatures = append(dependentFeatures, feat.Name())
+					}
+				}
+			}
+		}
+	}
+
+	if len(dependentFeatures) > 0 {
+		return fmt.Errorf("impossible de supprimer %q : features dépendantes installées : %s", name, strings.Join(dependentFeatures, ", "))
+	}
+
+	ctx := context.Background()
+
+	// Step 3: Build removal plan
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Construction du plan de suppression...")
+	}
+
+	plan, err := f.Plan(ctx, project)
+	if spinner != nil {
+		if err != nil {
+			spinner.Stop("✗ Construction du plan — échec")
+		} else {
+			spinner.Stop("✓ Plan validé")
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("construction du plan pour %q : %w", name, err)
+	}
+
+	// Detect conflicts (files that will be removed but may have user modifications)
+	if err := detectConflicts(project.Root, &plan); err != nil {
+		return fmt.Errorf("détection des conflits : %w", err)
+	}
+
+	if showPlan {
+		if g.Format == output.FormatHuman && !g.Quiet {
+			fmt.Fprintln(console.Out)
+		}
+		return printFeatureRemovePlan(g, plan)
+	}
+
+	// Step 4: Remove feature
+	if g.Format == output.FormatHuman && !g.Quiet {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "Suppression...")
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start(fmt.Sprintf("Suppression de %s...", name))
+	}
+
+	// Create snapshot for rollback
+	snapshot, err := createInstallSnapshot(project.Root)
+	if err != nil {
+		return fmt.Errorf("créer snapshot pour rollback: %w", err)
+	}
+
+	// Remove the feature
+	if remover, ok := f.(feature.FeatureRemover); ok {
+		if err := remover.Remove(ctx, project, plan); err != nil {
+			// Rollback on error
+			if rollbackErr := restoreInstallSnapshot(project.Root, snapshot); rollbackErr != nil {
+				return fmt.Errorf("suppression de %s échouée: %w; rollback aussi échoué: %v", name, err, rollbackErr)
+			}
+			return fmt.Errorf("suppression de %s: %w", name, err)
+		}
+	} else {
+		// Fallback: manual removal
+		if err := fallbackRemove(ctx, project, plan); err != nil {
+			if rollbackErr := restoreInstallSnapshot(project.Root, snapshot); rollbackErr != nil {
+				return fmt.Errorf("suppression de %s échouée: %w; rollback aussi échoué: %v", name, err, rollbackErr)
+			}
+			return fmt.Errorf("suppression de %s: %w", name, err)
+		}
+	}
+
+	if spinner != nil {
+		spinner.Stop(fmt.Sprintf("✓ %s supprimé", name))
+	}
+
+	// Step 5: Validate project
+	if g.Format == output.FormatHuman && !g.Quiet {
+		spinner = output.NewSpinner(console.Out)
+		spinner.Start("Validation du projet...")
+		time.Sleep(100 * time.Millisecond)
+		spinner.Stop("✓ Projet validé")
+	}
+
+	if g.Format == output.FormatHuman && !g.Quiet {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "────────────────────────────────")
+		fmt.Fprintf(console.Out, "✓ Feature %q supprimée avec succès\n", name)
+	}
+
+	return nil
+}
+
+func printFeatureRemovePlan(g *globalFlags, plan feature.Plan) error {
 	console := g.console()
 
 	if g.Format == output.FormatJSON {
-		return console.PrintJSON(plan)
+		type planWithSchema struct {
+			SchemaVersion string      `json:"schema_version"`
+			Plan          feature.Plan `json:"plan"`
+		}
+		return console.PrintJSON(planWithSchema{
+			SchemaVersion: report.JSONSchemaVersion,
+			Plan:          plan,
+		})
 	}
 
 	if g.Quiet {
 		for _, file := range plan.Files {
+			fmt.Fprintf(console.Out, "DELETE %s\n", file.Destination)
+		}
+		return nil
+	}
+
+	fmt.Fprintln(console.Out)
+	fmt.Fprintln(console.Out, "ForgeKit Remove Plan")
+	fmt.Fprintln(console.Out, "────────────────────────────────")
+	fmt.Fprintf(console.Out, "Feature : %s\n", plan.Feature)
+	fmt.Fprintf(console.Out, "Version : %s\n", plan.Version)
+
+	if len(plan.Files) > 0 {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "Fichiers à supprimer :")
+		for _, file := range plan.Files {
+			fmt.Fprintf(console.Out, "  - DELETE %s\n", file.Destination)
+		}
+	}
+
+	if len(plan.Dependencies) > 0 {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "Dépendances Go à supprimer :")
+		for _, dep := range plan.Dependencies {
+			fmt.Fprintf(console.Out, "  → %s %s\n", dep.Module, dep.Version)
+		}
+	}
+
+	if len(plan.Environment) > 0 {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "Variables d'environnement à supprimer :")
+		for _, env := range plan.Environment {
+			fmt.Fprintf(console.Out, "  → %s\n", env)
+		}
+	}
+
+	if len(plan.Conflicts) > 0 {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "Conflits détectés :")
+		for _, conflict := range plan.Conflicts {
+			fmt.Fprintf(console.Out, "  ⚠ %s: %s\n", conflict.File, conflict.Description)
+		}
+	}
+
+	fmt.Fprintln(console.Out)
+	fmt.Fprintln(console.Out, "Aucune modification effectuée.")
+
+	return nil
+}
+
+// fallbackRemove performs basic file removal when feature doesn't implement FeatureRemover
+func fallbackRemove(ctx context.Context, project feature.ProjectContext, plan feature.Plan) error {
+	for _, file := range plan.Files {
+		dest := filepath.Join(project.Root, file.Destination)
+		if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("supprimer %s : %w", dest, err)
+		}
+	}
+
+	// Remove dependencies from go.mod
+	for _, dep := range plan.Dependencies {
+		cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
+		cmd.Dir = project.Root
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			// Log but continue
+		}
+	}
+
+	if err := feature.RunGoModTidy(project.Root); err != nil {
+		return fmt.Errorf("go mod tidy : %w", err)
+	}
+
+	if err := feature.RunGoFmt(project.Root); err != nil {
+		return fmt.Errorf("gofmt : %w", err)
+	}
+
+	if err := feature.RemoveEnvironment(project.Root, plan.Environment); err != nil {
+		return fmt.Errorf("supprimer les variables d'environnement : %w", err)
+	}
+
+	if err := feature.RemoveInstalledFeature(project.Root, plan.Feature); err != nil {
+		return fmt.Errorf("supprimer l'enregistrement d'installation : %w", err)
+	}
+
+	return nil
+}
+
+func printFeaturePlan(g *globalFlags, plan feature.Plan, dryRun, showPlan bool) error {
+	console := g.console()
+
+	if g.Format == output.FormatJSON {
+		type planWithSchema struct {
+			SchemaVersion string      `json:"schema_version"`
+			Plan          feature.Plan `json:"plan"`
+		}
+		return console.PrintJSON(planWithSchema{
+			SchemaVersion: report.JSONSchemaVersion,
+			Plan:          plan,
+		})
+	}
+
+	if g.Quiet {
+		for _, file := range plan.Files {
+			action := "CREATE"
+			switch file.Action {
+			case feature.FileActionCreate:
+				action = "CREATE"
+			case feature.FileActionModify:
+				action = "MODIFY"
+			case feature.FileActionDelete:
+				action = "DELETE"
+			}
 			fmt.Fprintf(
 				console.Out,
-				"%s\n",
+				"%s %s\n",
+				action,
 				file.Destination,
 			)
 		}
@@ -1341,7 +1852,7 @@ func printFeaturePlan(g *globalFlags, plan feature.Plan) error {
 	}
 
 	fmt.Fprintln(console.Out)
-	fmt.Fprintln(console.Out, "ForgeKit Add")
+	fmt.Fprintln(console.Out, "ForgeKit Plan")
 	fmt.Fprintln(console.Out, "────────────────────────────────")
 	fmt.Fprintf(console.Out, "Feature : %s\n", plan.Feature)
 	fmt.Fprintf(console.Out, "Version : %s\n", plan.Version)
@@ -1351,9 +1862,19 @@ func printFeaturePlan(g *globalFlags, plan feature.Plan) error {
 		fmt.Fprintln(console.Out, "Fichiers :")
 
 		for _, file := range plan.Files {
+			action := "CREATE"
+			switch file.Action {
+			case feature.FileActionCreate:
+				action = "+ CREATE"
+			case feature.FileActionModify:
+				action = "~ MODIFY"
+			case feature.FileActionDelete:
+				action = "- DELETE"
+			}
 			fmt.Fprintf(
 				console.Out,
-				"  → %s\n",
+				"  %s %s\n",
+				action,
 				file.Destination,
 			)
 		}
@@ -1386,9 +1907,144 @@ func printFeaturePlan(g *globalFlags, plan feature.Plan) error {
 		}
 	}
 
-	fmt.Fprintln(console.Out)
-	fmt.Fprintln(console.Out, "Aucune modification effectuée (--dry-run).")
+	if len(plan.Conflicts) > 0 {
+		fmt.Fprintln(console.Out)
+		fmt.Fprintln(console.Out, "Conflits détectés :")
 
+		for _, conflict := range plan.Conflicts {
+			fmt.Fprintf(
+				console.Out,
+				"  ⚠ %s: %s\n",
+				conflict.File,
+				conflict.Description,
+			)
+		}
+	}
+
+	fmt.Fprintln(console.Out)
+	if dryRun || showPlan {
+		fmt.Fprintln(console.Out, "Aucune modification effectuée.")
+	} else {
+		fmt.Fprintln(console.Out, "Aucune modification effectuée (--dry-run).")
+	}
+
+	return nil
+}
+
+// InstallSnapshot holds the state of the project before installation for rollback.
+type InstallSnapshot struct {
+	GoModContent  []byte
+	GoSumContent  []byte
+	ForgeDirPath  string
+	ForgeFiles    map[string][]byte
+}
+
+// createInstallSnapshot captures the current state of key project files.
+func createInstallSnapshot(projectRoot string) (*InstallSnapshot, error) {
+	snapshot := &InstallSnapshot{
+		ForgeFiles: make(map[string][]byte),
+	}
+
+	// Snapshot go.mod
+	if data, err := os.ReadFile(filepath.Join(projectRoot, "go.mod")); err == nil {
+		snapshot.GoModContent = data
+	}
+
+	// Snapshot go.sum
+	if data, err := os.ReadFile(filepath.Join(projectRoot, "go.sum")); err == nil {
+		snapshot.GoSumContent = data
+	}
+
+	// Snapshot .forge directory
+	forgeDir := filepath.Join(projectRoot, ".forge")
+	snapshot.ForgeDirPath = forgeDir
+	if info, err := os.Stat(forgeDir); err == nil && info.IsDir() {
+		filepath.WalkDir(forgeDir, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			if data, err := os.ReadFile(path); err == nil {
+				relPath, _ := filepath.Rel(projectRoot, path)
+				snapshot.ForgeFiles[relPath] = data
+			}
+			return nil
+		})
+	}
+
+	return snapshot, nil
+}
+
+// restoreInstallSnapshot restores the project state from a snapshot.
+func restoreInstallSnapshot(projectRoot string, snapshot *InstallSnapshot) error {
+	// Restore go.mod
+	if len(snapshot.GoModContent) > 0 {
+		if err := os.WriteFile(filepath.Join(projectRoot, "go.mod"), snapshot.GoModContent, 0o644); err != nil {
+			return fmt.Errorf("restaurer go.mod: %w", err)
+		}
+	} else {
+		// If no go.mod was present, remove it
+		_ = os.Remove(filepath.Join(projectRoot, "go.mod"))
+	}
+
+	// Restore go.sum
+	if len(snapshot.GoSumContent) > 0 {
+		if err := os.WriteFile(filepath.Join(projectRoot, "go.sum"), snapshot.GoSumContent, 0o644); err != nil {
+			return fmt.Errorf("restaurer go.sum: %w", err)
+		}
+	} else {
+		_ = os.Remove(filepath.Join(projectRoot, "go.sum"))
+	}
+
+	// Restore .forge directory
+	if snapshot.ForgeDirPath != "" {
+		// Remove current .forge
+		_ = os.RemoveAll(snapshot.ForgeDirPath)
+		// Restore from snapshot
+		for relPath, data := range snapshot.ForgeFiles {
+			fullPath := filepath.Join(projectRoot, relPath)
+			if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+				return fmt.Errorf("créer répertoire %s: %w", filepath.Dir(fullPath), err)
+			}
+			if err := os.WriteFile(fullPath, data, 0o644); err != nil {
+				return fmt.Errorf("restaurer %s: %w", relPath, err)
+			}
+		}
+	}
+
+	// Run go mod tidy to restore consistency
+	_ = feature.RunGoModTidy(projectRoot)
+
+	return nil
+}
+
+// detectConflicts analyzes the project files and compares them with the plan
+// to detect potential conflicts (user modifications to files that will be modified).
+func detectConflicts(projectRoot string, plan *feature.Plan) error {
+	for i := range plan.Files {
+		file := &plan.Files[i]
+		dest := filepath.Join(projectRoot, file.Destination)
+
+		if _, err := os.Stat(dest); err == nil {
+			// File exists - check if it will be modified
+			if file.Action == feature.FileActionCreate {
+				// File exists but plan says create - this is a conflict
+				file.Action = feature.FileActionModify
+				plan.Conflicts = append(plan.Conflicts, feature.Conflict{
+					File:        file.Destination,
+					Description: "fichier existant sera écrasé",
+				})
+			} else if file.Action == feature.FileActionModify {
+				// File will be modified - check if user has modified it
+				plan.Conflicts = append(plan.Conflicts, feature.Conflict{
+					File:        file.Destination,
+					Description: "fichier existant sera modifié (vérifiez les changements utilisateur)",
+				})
+			}
+		} else if os.IsNotExist(err) {
+			// File doesn't exist - it will be created
+			file.Action = feature.FileActionCreate
+		}
+	}
 	return nil
 }
 
@@ -1405,30 +2061,32 @@ func newInspectCommand(g *globalFlags) *cobra.Command {
 
 			result := forge.ValidateSignature(root)
 
-			if g.Format == output.FormatJSON {
-				type inspectJSON struct {
-					Status   string                     `json:"status"`
-					Legacy   bool                       `json:"legacy"`
-					Metadata forge.ForgeMetadata        `json:"metadata"`
-					Features []feature.InstalledFeature `json:"features"`
-					Errors   []string                   `json:"errors"`
-					Warnings []string                   `json:"warnings"`
-				}
-				status := "valid"
-				if result.IsAbsent() {
-					status = "absent"
-				} else if result.IsInvalid() {
-					status = "invalid"
-				}
-				return console.PrintJSON(inspectJSON{
-					Status:   status,
-					Legacy:   result.LegacyProject,
-					Metadata: result.Metadata,
-					Features: result.Features.Features,
-					Errors:   result.Errors,
-					Warnings: result.Warnings,
-				})
+if g.Format == output.FormatJSON {
+			type inspectJSON struct {
+				SchemaVersion string                     `json:"schema_version"`
+				Status        string                     `json:"status"`
+				Legacy        bool                       `json:"legacy"`
+				Metadata      forge.ForgeMetadata        `json:"metadata"`
+				Features      []feature.InstalledFeature `json:"features"`
+				Errors        []string                   `json:"errors"`
+				Warnings      []string                   `json:"warnings"`
 			}
+			status := "valid"
+			if result.IsAbsent() {
+				status = "absent"
+			} else if result.IsInvalid() {
+				status = "invalid"
+			}
+			return console.PrintJSON(inspectJSON{
+				SchemaVersion: report.JSONSchemaVersion,
+				Status:        status,
+				Legacy:        result.LegacyProject,
+				Metadata:      result.Metadata,
+				Features:      result.Features.Features,
+				Errors:        result.Errors,
+				Warnings:      result.Warnings,
+			})
+		}
 
 			if result.IsAbsent() {
 				fmt.Fprintln(console.Out, "ForgeKit")

@@ -43,20 +43,33 @@ func ValidateSignature(projectRoot string) ValidationResult {
 	meta, err := LoadMetadata(projectRoot)
 	if err != nil {
 		if err == ErrMetadataNotFound {
-			legacyFeatures, featErr := feature.LoadFeatures(projectRoot)
-			if featErr == nil && len(legacyFeatures.Features) > 0 {
-				result.Status = SignatureValid
-				result.LegacyProject = true
-				result.Metadata = ForgeMetadata{
-					Schema:  0,
-					Project: "(legacy)",
+			// Check if features.yaml exists
+			featuresPath := filepath.Join(projectRoot, ".forge", "features.yaml")
+			if _, err := os.Stat(featuresPath); err != nil {
+				if os.IsNotExist(err) {
+					result.Status = SignatureInvalid
+					result.Errors = append(result.Errors, ".forge/forge.yaml missing and .forge/features.yaml missing")
+					return result
 				}
-				result.Features = legacyFeatures
-				result.Warnings = append(result.Warnings, "Legacy project detected: .forge/forge.yaml missing, only features.yaml present")
+				result.Status = SignatureInvalid
+				result.Errors = append(result.Errors, fmt.Sprintf("cannot access .forge/features.yaml: %v", err))
 				return result
 			}
-			result.Status = SignatureInvalid
-			result.Errors = append(result.Errors, ".forge/forge.yaml missing but .forge directory exists")
+			// features.yaml exists, treat as legacy
+			legacyFeatures, featErr := feature.LoadFeatures(projectRoot)
+			if featErr != nil {
+				result.Status = SignatureInvalid
+				result.Errors = append(result.Errors, fmt.Sprintf("invalid features.yaml: %v", featErr))
+				return result
+			}
+			result.Status = SignatureValid
+			result.LegacyProject = true
+			result.Metadata = ForgeMetadata{
+				Schema:  0,
+				Project: "(legacy)",
+			}
+			result.Features = legacyFeatures
+			result.Warnings = append(result.Warnings, "Legacy project detected: .forge/forge.yaml missing, only features.yaml present")
 			return result
 		}
 		result.Status = SignatureInvalid

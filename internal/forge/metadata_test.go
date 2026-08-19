@@ -152,7 +152,7 @@ func TestValidateSignature_InvalidMissingForgeYamlNoFeatures(t *testing.T) {
 	}
 	found := false
 	for _, e := range result.Errors {
-		if e == ".forge/forge.yaml missing but .forge directory exists" {
+		if e == ".forge/forge.yaml missing and .forge/features.yaml missing" {
 			found = true
 			break
 		}

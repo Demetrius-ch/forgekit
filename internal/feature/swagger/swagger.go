@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -23,6 +24,11 @@ func (SwaggerFeature) Description() string {
 
 func (SwaggerFeature) Version() string {
 	return "1.0.1"
+}
+
+// DependsOn returns the list of features this feature depends on.
+func (SwaggerFeature) DependsOn() []string {
+	return []string{"cors"}
 }
 
 func (SwaggerFeature) Check(ctx context.Context, project feature.ProjectContext) error {
@@ -57,10 +63,12 @@ func (SwaggerFeature) Plan(ctx context.Context, project feature.ProjectContext) 
 			{
 				Source:      "internal/swagger/swagger.go.tmpl",
 				Destination: "internal/swagger/swagger.go",
+				Action:      feature.FileActionCreate,
 			},
 			{
 				Source:      "internal/swagger/openapi.yaml.tmpl",
 				Destination: "internal/swagger/openapi.yaml",
+				Action:      feature.FileActionCreate,
 			},
 		},
 		Dependencies: []feature.Dependency{
@@ -136,6 +144,56 @@ func (SwaggerFeature) Apply(ctx context.Context, project feature.ProjectContext,
 
 	if err := feature.AddInstalledFeature(project.Root, "swagger", SwaggerFeature{}.Version()); err != nil {
 		return fmt.Errorf("enregistrer l'installation : %w", err)
+	}
+
+	return nil
+}
+
+// Remove uninstalls the swagger feature.
+func (SwaggerFeature) Remove(ctx context.Context, project feature.ProjectContext, plan feature.Plan) error {
+	// Remove files
+	for _, file := range plan.Files {
+		dest := filepath.Join(project.Root, file.Destination)
+		if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("supprimer %s : %w", dest, err)
+		}
+	}
+
+	// Remove empty directories if they exist
+	swaggerDir := filepath.Join(project.Root, "internal", "swagger")
+	if err := os.Remove(swaggerDir); err != nil && !os.IsNotExist(err) {
+		// Directory not empty or other error, ignore
+	}
+
+	// Remove dependencies from go.mod
+	for _, dep := range plan.Dependencies {
+		cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
+		cmd.Dir = project.Root
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			// Log but continue - dependency might not be in go.mod
+		}
+	}
+
+	// Run go mod tidy
+	if err := feature.RunGoModTidy(project.Root); err != nil {
+		return fmt.Errorf("go mod tidy : %w", err)
+	}
+
+	// Run gofmt
+	if err := feature.RunGoFmt(project.Root); err != nil {
+		return fmt.Errorf("gofmt : %w", err)
+	}
+
+	// Remove environment variables from .env.example
+	if err := feature.RemoveEnvironment(project.Root, plan.Environment); err != nil {
+		return fmt.Errorf("supprimer les variables d'environnement : %w", err)
+	}
+
+	// Remove installation record
+	if err := feature.RemoveInstalledFeature(project.Root, "swagger"); err != nil {
+		return fmt.Errorf("supprimer l'enregistrement d'installation : %w", err)
 	}
 
 	return nil

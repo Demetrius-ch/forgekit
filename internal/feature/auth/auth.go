@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/Demetrius-ch/forgekit/internal/feature"
@@ -63,10 +64,12 @@ func (AuthFeature) Plan(ctx context.Context, project feature.ProjectContext) (fe
 			{
 				Source:      "internal/auth/jwt.go.tmpl",
 				Destination: "internal/auth/jwt.go",
+				Action:      feature.FileActionCreate,
 			},
 			{
 				Source:      "internal/auth/middleware.go.tmpl",
 				Destination: "internal/auth/middleware.go",
+				Action:      feature.FileActionCreate,
 			},
 		},
 		Dependencies: []feature.Dependency{
@@ -138,6 +141,56 @@ func (AuthFeature) Apply(ctx context.Context, project feature.ProjectContext, pl
 	// Record installation
 	if err := feature.AddInstalledFeature(project.Root, "auth", AuthFeature{}.Version()); err != nil {
 		return fmt.Errorf("enregistrer l'installation : %w", err)
+	}
+
+	return nil
+}
+
+// Remove uninstalls the auth feature.
+func (AuthFeature) Remove(ctx context.Context, project feature.ProjectContext, plan feature.Plan) error {
+	// Remove files
+	for _, file := range plan.Files {
+		dest := filepath.Join(project.Root, file.Destination)
+		if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("supprimer %s : %w", dest, err)
+		}
+	}
+
+	// Remove empty directories if they exist
+	authDir := filepath.Join(project.Root, "internal", "auth")
+	if err := os.Remove(authDir); err != nil && !os.IsNotExist(err) {
+		// Directory not empty or other error, ignore
+	}
+
+	// Remove dependencies from go.mod
+	for _, dep := range plan.Dependencies {
+		cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
+		cmd.Dir = project.Root
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			// Log but continue - dependency might not be in go.mod
+		}
+	}
+
+	// Run go mod tidy
+	if err := feature.RunGoModTidy(project.Root); err != nil {
+		return fmt.Errorf("go mod tidy : %w", err)
+	}
+
+	// Run gofmt
+	if err := feature.RunGoFmt(project.Root); err != nil {
+		return fmt.Errorf("gofmt : %w", err)
+	}
+
+	// Remove environment variables from .env.example
+	if err := feature.RemoveEnvironment(project.Root, plan.Environment); err != nil {
+		return fmt.Errorf("supprimer les variables d'environnement : %w", err)
+	}
+
+	// Remove installation record
+	if err := feature.RemoveInstalledFeature(project.Root, "auth"); err != nil {
+		return fmt.Errorf("supprimer l'enregistrement d'installation : %w", err)
 	}
 
 	return nil

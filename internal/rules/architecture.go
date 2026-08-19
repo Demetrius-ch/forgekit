@@ -34,6 +34,7 @@ func (r ArchitectureRule) Run(_ context.Context, rctx Context) ([]report.Finding
 	}
 
 	var findings []report.Finding
+	violationCount := 0
 	for _, pkg := range project.Packages {
 		if pkg.Layer == "unknown" {
 			continue
@@ -48,23 +49,24 @@ func (r ArchitectureRule) Run(_ context.Context, rctx Context) ([]report.Finding
 			}
 			for _, rule := range rules {
 				if rule.From == pkg.Layer && rule.To == targetLayer && !rule.Allow {
+					violationCount++
 					findings = append(findings, report.Finding{
 						ID:          "arch.layers",
 						Category:    "architecture",
 						Severity:    report.SeverityError,
 						File:        pkg.Dir,
-						Message:     fmt.Sprintf("%s ne doit pas importer %s", pkg.Layer, targetLayer),
-						Explanation: fmt.Sprintf("Règle : %s -> %s = forbidden", rule.From, rule.To),
-						Suggestion:  "Introduisez une interface dans domain et injectez l'implémentation",
+						Message:     fmt.Sprintf("Violation d'architecture: %s importe %s (interdit)", pkg.Layer, targetLayer),
+						Explanation: fmt.Sprintf("La couche '%s' ne doit pas dépendre de la couche '%s'. Règle: %s -> %s = forbidden", pkg.Layer, targetLayer, rule.From, rule.To),
+						Suggestion:  "Introduisez une interface dans domain et injectez l'implémentation via l'injection de dépendances",
 					})
 				}
 			}
 		}
 	}
-	if len(findings) == 0 && len(project.Packages) > 0 {
+	if violationCount == 0 && len(project.Packages) > 0 {
 		findings = append(findings, report.Finding{
 			ID: "arch.layers", Category: "pass", Severity: report.SeverityInfo,
-			Message: "Aucune violation de couche détectée",
+			Message: "Architecture respectée: aucune violation de couche détectée",
 		})
 	}
 	return findings, nil
