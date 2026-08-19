@@ -2,7 +2,7 @@
   "name": "forgekit-vscode",
   "displayName": "ForgeKit for VS Code",
   "description": "Official ForgeKit integration for VS Code. Provides project detection and project inspection.",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "publisher": "forgekit",
   "engines": {
     "vscode": "^1.85.0"

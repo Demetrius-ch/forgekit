@@ -31,6 +31,7 @@ interface ValidationResult {
 }
 
 let yamlParse: (content: string) => any;
+let statusBarItem: vscode.StatusBarItem | undefined;
 
 async function loadYaml() {
   if (!yamlParse) {
@@ -40,8 +41,52 @@ async function loadYaml() {
   return yamlParse;
 }
 
+function createStatusBarItem(): vscode.StatusBarItem {
+  const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  item.command = 'forgekit.inspectProject';
+  item.tooltip = 'ForgeKit: Inspect Project';
+  return item;
+}
+
+function updateStatusBarItem(result: ValidationResult): void {
+  if (!statusBarItem) {
+    statusBarItem = createStatusBarItem();
+  }
+
+  switch (result.status) {
+    case 'valid':
+      statusBarItem.text = '$(check) ForgeKit ✓';
+      statusBarItem.backgroundColor = undefined;
+      break;
+    case 'legacy':
+      statusBarItem.text = '$(warning) ForgeKit ⚠';
+      statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+      break;
+    case 'invalid':
+      statusBarItem.text = '$(error) ForgeKit ✗';
+      statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+      break;
+    case 'absent':
+    default:
+      statusBarItem.hide();
+      return;
+  }
+
+  statusBarItem.show();
+}
+
+function disposeStatusBarItem(): void {
+  if (statusBarItem) {
+    statusBarItem.dispose();
+    statusBarItem = undefined;
+  }
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   console.log('ForgeKit extension activated');
+
+  statusBarItem = createStatusBarItem();
+  context.subscriptions.push(statusBarItem);
 
   const disposableInspect = vscode.commands.registerCommand('forgekit.inspectProject', () => {
     inspectProject();
@@ -55,13 +100,20 @@ export async function activate(context: vscode.ExtensionContext) {
 
   if (vscode.workspace.workspaceFolders) {
     for (const folder of vscode.workspace.workspaceFolders) {
-      validateForgeProject(folder.uri.fsPath);
+      const result = await validateForgeProject(folder.uri.fsPath);
+      updateStatusBarItem(result);
     }
   }
 
   vscode.workspace.onDidChangeWorkspaceFolders((event) => {
     for (const folder of event.added) {
-      validateForgeProject(folder.uri.fsPath);
+      validateForgeProject(folder.uri.fsPath).then(updateStatusBarItem);
+    }
+    for (const folder of event.removed) {
+      // If all folders removed, hide status bar
+      if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+        disposeStatusBarItem();
+      }
     }
   });
 }
@@ -148,6 +200,7 @@ async function inspectProject() {
 
   for (const folder of folders) {
     const result = await validateForgeProject(folder.uri.fsPath);
+    updateStatusBarItem(result);
     showInspectResult(folder.name, result);
   }
 }
@@ -242,4 +295,5 @@ async function runDoctor() {
 
 export function deactivate() {
   console.log('ForgeKit extension deactivated');
+  disposeStatusBarItem();
 }

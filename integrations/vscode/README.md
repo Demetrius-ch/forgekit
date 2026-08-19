@@ -4,11 +4,12 @@ Official Visual Studio Code extension for [ForgeKit](https://github.com/Demetriu
 
 ## Features
 
--  **Visual Identity**: Custom icon for `.forge/` folders in the file explorer
--  **Project Detection**: Automatically detects ForgeKit projects in your workspace
--  **Project Inspection**: `ForgeKit: Inspect Project` command to view project metadata and features
--  **Doctor Integration**: `ForgeKit: Run Doctor` command to run `forge doctor` in the terminal
--  **Legacy Support**: Recognizes older ForgeKit projects with only `features.yaml`
+- **Project Detection**: Automatically detects ForgeKit projects in your workspace
+- **Status Bar Indicator**: Shows ForgeKit project status at a glance (valid ✓, legacy ⚠, invalid ✗)
+- **Project Inspection**: `ForgeKit: Inspect Project` command to view project metadata and features
+- **Doctor Integration**: `ForgeKit: Run Doctor` command to run `forge doctor` in the terminal
+- **Legacy Support**: Recognizes older ForgeKit projects with only `features.yaml`
+- **Non-Intrusive**: Never modifies your icon theme or workspace settings
 
 ## Installation
 
@@ -22,7 +23,7 @@ npm run compile
 vsce package
 
 # Install in VS Code
-code --install-extension forgekit-vscode-0.2.0.vsix
+code --install-extension forgekit-vscode-0.2.5.vsix
 ```
 
 ### From Source (Development)
@@ -40,6 +41,19 @@ npm run compile
 |---------|-------------|
 | `ForgeKit: Inspect Project` | Display project metadata, features, and signature status |
 | `ForgeKit: Run Doctor` | Execute `forge doctor` in a terminal |
+
+## Status Bar Indicator
+
+The extension adds a ForgeKit status item in the VS Code status bar (right side):
+
+| Status | Indicator | Meaning |
+|--------|-----------|---------|
+| **Valid** | `$(check) ForgeKit ✓` | `.forge/forge.yaml` exists and is valid |
+| **Legacy** | `$(warning) ForgeKit ⚠` | Only `.forge/features.yaml` exists (legacy project) |
+| **Invalid** | `$(error) ForgeKit ✗` | `.forge/` exists but `forge.yaml` is missing/invalid |
+| **Absent** | *(hidden)* | No `.forge/` directory in workspace |
+
+Click the status bar item to run **ForgeKit: Inspect Project**.
 
 ## Configuration
 
@@ -63,21 +77,31 @@ The extension validates ForgeKit projects by checking:
 
 ### Project States
 
-| State | Criteria | Indicator |
-|-------|----------|-----------|
-| **Valid** | `.forge/forge.yaml` exists, valid YAML, supported schema | ✓ ForgeKit Project |
-| **Legacy** | Only `.forge/features.yaml` exists (no `forge.yaml`) | ⚠ Legacy ForgeKit Project |
-| **Invalid** | `.forge/` exists but `forge.yaml` is missing/invalid | ⚠ Invalid ForgeKit Configuration |
-| **Absent** | No `.forge/` directory | Not a ForgeKit Project |
+| State | Criteria | Status Bar |
+|-------|----------|------------|
+| **Valid** | `.forge/forge.yaml` exists, valid YAML, supported schema | `ForgeKit ✓` |
+| **Legacy** | Only `.forge/features.yaml` exists (no `forge.yaml`) | `ForgeKit ⚠` |
+| **Invalid** | `.forge/` exists but `forge.yaml` is missing/invalid | `ForgeKit ✗` |
+| **Absent** | No `.forge/` directory | *(hidden)* |
 
-## Folder Icon (`.forge`)
+## Why No File Icon Theme?
 
-The `.forge/` folder icon is provided by **Material Icon Theme** (PR submitted upstream).  
-If you use Material Icon Theme, the ForgeKit icon appears automatically — no configuration needed.
+The ForgeKit extension **does not** contribute a File Icon Theme and will **never** automatically change your `workbench.iconTheme` setting. This is by design:
 
-The ForgeKit extension **does not** contribute its own File Icon Theme and will never prompt you to select one. It focuses on project detection, inspection, and doctor integration.
+- **VS Code API limitation**: Extensions cannot inject a single folder icon into another extension's active icon theme
+- **Respect user preferences**: Your chosen icon theme (Material Icon Theme, vscode-icons, Seti, etc.) remains intact
+- **No conflicts**: The extension works alongside any icon theme without interference
 
-If you prefer a different icon theme, the extension works normally — only the `.forge/` folder icon falls back to VS Code's default folder icon.
+The `.forge/` folder icon in the Explorer is determined entirely by your active icon theme:
+- **Material Icon Theme**: Shows ForgeKit icon (added via upstream PR)
+- **Other themes**: Shows the theme's default folder icon
+- **No theme**: Shows VS Code's built-in folder icon
+
+ForgeKit's visual identity is provided through UI elements the extension fully controls:
+- **Activity Bar** — ForgeKit logo and project view
+- **Status Bar** — Real-time project status indicator
+- **Commands** — `Inspect Project` and `Run Doctor`
+- **WebView** — Rich project inspection panel
 
 ## Requirements
 
@@ -90,9 +114,9 @@ If you prefer a different icon theme, the extension works normally — only the 
 ForgeKit CLI          .forge/              ForgeKit VS Code
 ─────────────────     ─────────────        ─────────────────
 creates .forge    →   forge.yaml        →  detects, displays
-validates .forge    features.yaml        icon, inspects
-manages features
-runs doctor/inspect                      calls CLI for complex ops
+validates .forge    features.yaml        status, inspects
+manages features                                  calls CLI for complex ops
+runs doctor/inspect
 ```
 
 The extension **never** reimplements ForgeKit business logic. It:
