@@ -1,0 +1,103 @@
+# .goreleaser.yaml - ForgeKit Release Configuration
+# This file controls how ForgeKit releases are built and published.
+# Version is injected from git tag via ldflags.
+
+version: 2
+
+# Build configuration
+builds:
+  - id: forge
+    main: ./cmd/forge
+    binary: forge
+    goos:
+      - linux
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X github.com/Demetrius-ch/forgekit/internal/app.Version={{.Version}}
+    flags:
+      - -trimpath
+
+# Archive configuration
+archives:
+  - id: forge
+    builds:
+      - forge
+    format: tar.gz
+    name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}_{{.Arch}}"
+    # No extra files in archive (just the binary)
+
+# Checksums
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# Debian package via nfpm (plural in v2)
+nfpms:
+  - id: forge-deb
+    builds:
+      - forge
+    package_name: forge
+    vendor: ForgeKit
+    homepage: https://github.com/Demetrius-ch/forgekit
+    maintainer: ForgeKit Maintainers <forgekit@demetrius-ch.github.io>
+    description: |
+      ForgeKit — Go Backend Generator
+      Build production-ready REST APIs with hexagonal architecture.
+      Scaffolds projects with PostgreSQL, Docker, migrations, tests.
+    license: MIT
+    formats:
+      - deb
+    bindir: /usr/bin
+    dependencies:
+      - libc6
+      - ca-certificates
+    recommends:
+      - docker.io
+      - docker-compose
+    section: devel
+    priority: optional
+    epoch: "0"
+    file_name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}_{{.Arch}}"
+
+# Release configuration
+release:
+  github:
+    owner: Demetrius-ch
+    name: forgekit
+  draft: false
+  prerelease: auto
+  mode: replace
+  name_template: "ForgeKit {{.Version}}"
+  header: |
+    # ForgeKit {{.Version}}
+    
+    ForgeKit is a Go CLI tool that generates production-ready REST APIs with hexagonal architecture.
+  footer: |
+    ---
+    **Full Changelog**: https://github.com/Demetrius-ch/forgekit/compare/{{.PreviousTag}}...{{.Tag}}
+    **Installation**: See [README](https://github.com/Demetrius-ch/forgekit#installation)
+  disable: false
+
+# Changelog configuration
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - Merge pull request
+      - Merge branch
+
+# Before hooks for validation
+before:
+  hooks:
+    - go mod tidy
+    - go vet ./...
+    - go test ./...

@@ -52,6 +52,22 @@ and get a structured Go backend ready for development.
 
 ## Installation
 
+### Linux (Debian/Ubuntu) — Recommended
+
+Download the latest `.deb` package from [GitHub Releases](https://github.com/Demetrius-ch/forgekit/releases):
+
+```bash
+wget https://github.com/Demetrius-ch/forgekit/releases/download/v0.3.0/forge_0.3.0_linux_amd64.deb
+sudo dpkg -i forge_0.3.0_linux_amd64.deb
+forge version
+```
+
+Uninstall:
+
+```bash
+sudo apt remove forge
+```
+
 ### From source
 
 Requirements:
@@ -83,6 +99,24 @@ Verify the installation:
 
 ```bash
 forge version
+```
+
+### Binary (Linux)
+
+Download the static binary from [GitHub Releases](https://github.com/Demetrius-ch/forgekit/releases):
+
+```bash
+wget https://github.com/Demetrius-ch/forgekit/releases/download/v0.3.0/forge_0.3.0_linux_amd64.tar.gz
+tar -xzf forge_0.3.0_linux_amd64.tar.gz
+sudo mv forge /usr/local/bin/
+forge version
+```
+
+Verify checksums (SHA256):
+
+```bash
+wget https://github.com/Demetrius-ch/forgekit/releases/download/v0.3.0/checksums.txt
+sha256sum -c checksums.txt
 ```
 
 ---

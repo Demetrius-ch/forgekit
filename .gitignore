@@ -1,14 +1,29 @@
-11.md
-error.md
+
+# Build artifacts
+forge
+forge-*
+*.deb
+*.tar.gz
+checksums.txt
+
+# Release artifacts
+dist/
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+
+# Documentation files (generated or local)
 explication.md
 projects.md
-v0.3.0-audit-plan.md
 
+# Environment
 .env
 *.log
 bin/
-dist/
 tmp/
+
 # VS Code Extension build artifacts
 integrations/vscode/node_modules/
 integrations/vscode/out/

@@ -1,0 +1,53 @@
+# .github/workflows/release.yml - ForgeKit Release Workflow
+# Triggers on git tags matching v* (e.g., v0.3.0)
+# Runs tests, builds with GoReleaser, and publishes to GitHub Releases
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  # packages: write  # Uncomment if publishing to GitHub Packages
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for GoReleaser to get tag history
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Set up GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+
+      - name: Upload release artifacts
+        # Artifacts are automatically uploaded by GoReleaser to the GitHub Release
+        # This step is just for additional artifacts if needed
+        if: false
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/
