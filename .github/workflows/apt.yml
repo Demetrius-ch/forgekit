@@ -32,11 +32,10 @@ jobs:
           cache: false
 
       - name: Download release assets
-        uses: actions/download-artifact@v4
-        with:
-          pattern: forgekit_*_linux_amd64.deb
-          merge-multiple: true
-          path: artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download ${{ github.event.release.tag_name }} --repo ${{ github.repository }} --pattern '*_linux_amd64.deb' --dir artifacts
 
       - name: List artifacts
         run: ls -la artifacts/
