@@ -58,9 +58,15 @@ jobs:
           mkdir -p apt/dists/stable/main/binary-amd64
           mkdir -p apt/gpg
 
-      - name: Copy .deb to pool
+      - name: Get latest release tag
+        id: get_tag
         run: |
-          cp artifacts/forgekit_*_linux_amd64.deb apt/pool/main/f/forge/forge_${{ github.event.release.tag_name }}_amd64.deb
+          TAG=$(gh release list --repo ${{ github.repository }} --limit 1 --json tagName --jq '.[0].tagName')
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+- name: Copy .deb to pool
+        run: |
+          cp artifacts/forgekit_*_linux_amd64.deb apt/pool/main/f/forge/forge_${{ steps.get_tag.outputs.tag }}_amd64.deb
 
       - name: Generate Packages
         run: |
