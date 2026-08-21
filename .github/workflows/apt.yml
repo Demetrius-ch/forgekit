@@ -41,11 +41,12 @@ jobs:
       - name: List artifacts
         run: ls -la artifacts/
 
-      - name: Setup GPG
-        uses: actions/setup-gpg@v1
-        with:
-          gpg-private-key: ${{ secrets.FORGEKIT_APT_GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.FORGEKIT_APT_GPG_PASSPHRASE }}
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.FORGEKIT_APT_GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.FORGEKIT_APT_GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import
 
       - name: Copy public key to repo
         run: |
