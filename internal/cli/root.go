@@ -80,21 +80,21 @@ func newVersionCommand(g *globalFlags) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			console := g.console()
 
-if console.Format == output.FormatJSON {
-			type versionInfo struct {
-				SchemaVersion string `json:"schema_version"`
-				Name          string `json:"name"`
-				Version       string `json:"version"`
-				Slogan        string `json:"slogan"`
+			if console.Format == output.FormatJSON {
+				type versionInfo struct {
+					SchemaVersion string `json:"schema_version"`
+					Name          string `json:"name"`
+					Version       string `json:"version"`
+					Slogan        string `json:"slogan"`
+				}
+				_ = console.PrintJSON(versionInfo{
+					SchemaVersion: report.JSONSchemaVersion,
+					Name:          app.Name,
+					Version:       app.Version,
+					Slogan:        "Build • Extend • Ship",
+				})
+				return
 			}
-			_ = console.PrintJSON(versionInfo{
-				SchemaVersion: report.JSONSchemaVersion,
-				Name:          app.Name,
-				Version:       app.Version,
-				Slogan:        "Build • Extend • Ship",
-			})
-			return
-		}
 
 			if !console.Quiet {
 				fmt.Fprintf(console.Out, "%s version %s\n", app.Name, app.Version)

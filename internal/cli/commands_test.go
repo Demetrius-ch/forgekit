@@ -359,10 +359,10 @@ func TestAddCommandPlanFlag(t *testing.T) {
 	if !strings.Contains(out, "ForgeKit Plan") {
 		t.Fatalf("expected 'ForgeKit Plan' in output, got:\n%s", out)
 	}
-	if !strings.Contains(out, "Feature : auth") {
+	if !strings.Contains(out, "Feature: auth") {
 		t.Fatalf("expected feature name in output, got:\n%s", out)
 	}
-	if !strings.Contains(out, "Version : 1.0.0") {
+	if !strings.Contains(out, "Version: 1.0.0") {
 		t.Fatalf("expected feature version in output, got:\n%s", out)
 	}
 }

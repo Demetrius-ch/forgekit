@@ -5,14 +5,15 @@
 // Docker, migrations, tests, and provides validation commands.
 //
 // Commands:
-//   init     Initialize a new ForgeKit project
-//   add      Add features to an existing project (auth, cors, logging, swagger)
-//   doctor   Diagnose development environment and project health
-//   check    Validate architectural conventions (CI)
-//   analyze  Analyze project structure and practices
-//   inspect  Inspect ForgeKit project signature
-//   config   Manage ForgeKit configuration
-//   version  Print version information
+//
+//	init     Initialize a new ForgeKit project
+//	add      Add features to an existing project (auth, cors, logging, swagger)
+//	doctor   Diagnose development environment and project health
+//	check    Validate architectural conventions (CI)
+//	analyze  Analyze project structure and practices
+//	inspect  Inspect ForgeKit project signature
+//	config   Manage ForgeKit configuration
+//	version  Print version information
 //
 // Example usage:
 //

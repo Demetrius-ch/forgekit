@@ -1,0 +1,44 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: ForgeKit
+Label: ForgeKit
+Suite: stable
+Codename: stable
+Architectures: amd64
+Components: main
+Description: ForgeKit APT Repository
+Date: 2026-08-21 13:30:00 +0100
+Date: Fri, 21 Aug 2026 12:19:59 +0000
+MD5Sum:
+ 09d116c7c3cb9de69050969dec575f59              209 Release
+ 16fde70e52001d8e6bf32b41c2d937e6              743 main/binary-amd64/Packages
+ 82f42ebee80cd3ca148240b1edf32ac5              533 main/binary-amd64/Packages.gz
+SHA1:
+ 59e0db870eb66ba7de4d4fb47343553dc1bea6b0              209 Release
+ 26425f8a3c408ca19ae83e6f50257f28233aaf46              743 main/binary-amd64/Packages
+ 0b54a21260b2fbed84e9be6f009df4da42c7f059              533 main/binary-amd64/Packages.gz
+SHA256:
+ 2d8b5027ed08519b64aaa6e13c7b83d0943bb82320831be89fd703d72a033a55              209 Release
+ 2c6e697c5a83b482ea5dba13281a9e99ef846b40b3bef6fba0772a08442f46a1              743 main/binary-amd64/Packages
+ c8c642d7bca234f8b0bfa26bda04de3865d2b84e3745a718a6f9f139837e0993              533 main/binary-amd64/Packages.gz
+SHA512:
+ a674a8a05f3474b4bae1b9932b6e462857d2162053f0ef20c0eefd57dd7de29e5ed162f043f1ac088448f368bb1e3c1d2bf241a088c9f17d7d8dec1af64b7ef1              209 Release
+ 0b0a3575ab5f50582fa486ed86a698c08d96a0066b8abab81fcb5d5edc46d79118bc1f03b088d6a5f909aaf0fde3e5cb6ecbaae0df4f9482db47ab6b331a456b              743 main/binary-amd64/Packages
+ 21861b440b71b90741598b2176532755c700ea452c5cece0a08be5f3220bcdb65aa35055a4e1c8b95ea596f42b5d3d6239966a50036dd640396cbbbd66a29d15              533 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEzR7ATV0m57Oi43hHdKRJ78EO9GAFAmqITvcACgkQdKRJ78EO
+9GDx5A/8D8fRyfaBBBJJzj3SjS932iJ/X51AiP0LaLpVUKeHVrRp+chBGd78Y0mO
+CRWDcUUkI2uOCHrZRxJdbPdqDoTdWMP7/wScsodLeG/Fi+T9OS//iZI2vKx3tKnJ
+YDhzgBfihwXC+UtyMNCD4Fp23CtkgrRJRpiD0O5JfHveRgUjqMEyYDx/JGsPr+rP
+msXzThSJKLFzZGjfxkZ0Od8CydIgHG7K4RvgzhEZB1HhIEel1DwUPcuNCH3+jXma
+2LiMpQ1YGtwso+IttpQu5gCpyt2fSPd2mUTF6NU7lCSJwBZvi+CCf8G0PwH0uZFk
+DliNZtILr/Y81FtxjnzQEYAetuD1L2vsRIvWu9+6otW8ogM9fERx3fb6QDMQm58S
+0t5EV1oCCKCZh6r95Attu7DsSEZEvhX471DXcIHiXUMd+VczlZbnOYvMKYi2c6I8
+nkdWJD2OMm4IG3gnv31MGYqbZpDRVzQVMkntDV3+FzaSUHG27VhuxOxNycvhkQ5a
+dMwmbTDusFgXv8ZJjb8zfQ3WvSxaf3dNG8H5VSLst8HkkUnPnyLQyJGN/U4Kw6gc
+3hPoaP+hj/y9iBLo3dk6jSMvsPqyGChUDobpfLP30vQoyxgmLO7D5Zgc1Ny/UfXF
+GKOmTIkaAAEjy8OUTA+aELiz9Kka3FUgSOL6+YrbC3Nkio6SusQ=
+=Ov46
+-----END PGP SIGNATURE-----

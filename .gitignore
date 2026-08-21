@@ -1,4 +1,5 @@
 
+error.md
 # Build artifacts
 forge
 forge-*
@@ -23,6 +24,9 @@ projects.md
 *.log
 bin/
 tmp/
+
+# APT repository private key (never commit)
+apt/gpg/forgekit-apt-private-key.gpg
 
 # VS Code Extension build artifacts
 integrations/vscode/node_modules/

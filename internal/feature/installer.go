@@ -2,12 +2,15 @@ package feature
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/Demetrius-ch/forgekit/internal/output"
+	"github.com/Demetrius-ch/forgekit/internal/prompt"
 )
 
 // FileChange represents a file modification for rollback tracking.
@@ -15,14 +18,26 @@ type FileChange struct {
 	Path       string
 	Existed    bool
 	OldContent []byte
+	OldHash    string
+}
+
+// ConflictInfo represents a detected conflict
+type ConflictInfo struct {
+	File        string
+	Description string
+	UserContent []byte
+	PlanContent []byte
 }
 
 // Installer applies feature plans with rollback capability.
 type Installer struct {
 	projectRoot string
 	changes     []FileChange
+	conflicts   []ConflictInfo
 	dryRun      bool
 	console     *output.Console
+	prompt      *prompt.Prompter
+	rollbackMgr *RollbackManager
 }
 
 // NewInstaller creates an installer for a project.
@@ -30,13 +45,30 @@ func NewInstaller(projectRoot string, console *output.Console, dryRun bool) *Ins
 	return &Installer{
 		projectRoot: projectRoot,
 		changes:     make([]FileChange, 0),
+		conflicts:   make([]ConflictInfo, 0),
 		dryRun:      dryRun,
 		console:     console,
+		prompt:      prompt.New(os.Stdin, os.Stdout),
+		rollbackMgr: NewRollbackManager(projectRoot),
 	}
+}
+
+// computeHash computes SHA256 hash of content
+func computeHash(content []byte) string {
+	h := sha256.Sum256(content)
+	return fmt.Sprintf("%x", h)
 }
 
 // Apply executes a feature plan with rollback on failure.
 func (i *Installer) Apply(ctx context.Context, plan Plan) error {
+	// Create snapshot before applying
+	if !i.dryRun {
+		_, err := i.rollbackMgr.CreateSnapshot(fmt.Sprintf("pre-install-%s", plan.Feature))
+		if err != nil {
+			return fmt.Errorf("créer snapshot pour rollback: %w", err)
+		}
+	}
+
 	// Step 1: Create/copy files
 	if err := i.applyFiles(ctx, plan.Files); err != nil {
 		_ = i.Rollback()
@@ -66,7 +98,7 @@ func (i *Installer) applyFiles(ctx context.Context, files []FileAction) error {
 			continue
 		}
 
-		// Read existing content for rollback
+		// Read existing content for rollback and conflict detection
 		var oldContent []byte
 		existed := true
 		if data, err := os.ReadFile(dest); err == nil {
@@ -77,33 +109,97 @@ func (i *Installer) applyFiles(ctx context.Context, files []FileAction) error {
 			return fmt.Errorf("lire %s : %w", dest, err)
 		}
 
-		// Record change for potential rollback
-		i.changes = append(i.changes, FileChange{
-			Path:       dest,
-			Existed:    existed,
-			OldContent: oldContent,
-		})
-
 		// Ensure destination directory exists
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return fmt.Errorf("créer le répertoire %s : %w", filepath.Dir(dest), err)
 		}
 
-		// Read source content
-		var content []byte
+		// Read source content (plan content)
+		var planContent []byte
 		if strings.HasSuffix(file.Source, ".tmpl") {
 			// Template files are embedded - we need to render them
 			// For now, treat as regular files
-			content, _ = os.ReadFile(file.Source)
+			planContent, _ = os.ReadFile(file.Source)
 		} else {
-			content, _ = os.ReadFile(file.Source)
+			planContent, _ = os.ReadFile(file.Source)
 		}
 
-		if err := os.WriteFile(dest, content, 0o644); err != nil {
+		// Check for conflicts if file exists and will be modified
+		if existed && (file.Action == FileActionModify || file.Action == FileActionCreate) {
+			oldHash := computeHash(oldContent)
+			planHash := computeHash(planContent)
+
+			// If hashes differ, user has modified the file
+			if oldHash != planHash {
+				conflict := ConflictInfo{
+					File:        file.Destination,
+					Description: "fichier modifié par l'utilisateur",
+					UserContent: oldContent,
+					PlanContent: planContent,
+				}
+				i.conflicts = append(i.conflicts, conflict)
+
+				// If not in dry-run, ask user what to do
+				if !i.dryRun {
+					action, err := i.handleConflict(conflict)
+					if err != nil {
+						return err
+					}
+					if action == "skip" {
+						// Record as skipped (no change)
+						continue
+					}
+					// If action == "overwrite", continue with installation
+				}
+			}
+		}
+
+		// Record change for potential rollback
+		i.changes = append(i.changes, FileChange{
+			Path:       dest,
+			Existed:    existed,
+			OldContent: oldContent,
+			OldHash:    computeHash(oldContent),
+		})
+
+		if err := os.WriteFile(dest, planContent, 0o644); err != nil {
 			return fmt.Errorf("écrire %s : %w", dest, err)
 		}
 	}
 	return nil
+}
+
+// handleConflict prompts user for conflict resolution
+func (i *Installer) handleConflict(conflict ConflictInfo) (string, error) {
+	if i.console.Format == output.FormatJSON || i.console.Quiet {
+		// In JSON/quiet mode, skip by default
+		return "skip", nil
+	}
+
+	fmt.Fprintf(i.console.Out, "\n⚠ Conflit détecté : %s\n", conflict.File)
+	fmt.Fprintf(i.console.Out, "  Description: %s\n", conflict.Description)
+	fmt.Fprintln(i.console.Out, "  Que voulez-vous faire ?")
+	fmt.Fprintln(i.console.Out, "  1. Écraser (installer la version ForgeKit)")
+	fmt.Fprintln(i.console.Out, "  2. Conserver (ignorer ce fichier)")
+
+	choice, err := i.prompt.AskInt("Choix", 1)
+	if err != nil {
+		return "", err
+	}
+
+	switch choice {
+	case 1:
+		return "overwrite", nil
+	case 2:
+		return "skip", nil
+	default:
+		return "skip", nil
+	}
+}
+
+// Conflicts returns the list of detected conflicts
+func (i *Installer) Conflicts() []ConflictInfo {
+	return i.conflicts
 }
 
 func (i *Installer) applyDependencies(ctx context.Context, deps []Dependency) error {
@@ -111,14 +207,16 @@ func (i *Installer) applyDependencies(ctx context.Context, deps []Dependency) er
 		return nil
 	}
 
-	// Build go get arguments
-	args := []string{"get"}
 	for _, dep := range deps {
-		args = append(args, dep.Module+"@"+dep.Version)
+		cmd := exec.Command("go", "get", dep.Module+"@"+dep.Version)
+		cmd.Dir = i.projectRoot
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("go get %s@%s : %w", dep.Module, dep.Version, err)
+		}
 	}
 
-	// Execute go get
-	// Note: We don't run go mod tidy here - that's done after successful installation
 	return nil
 }
 
@@ -168,9 +266,14 @@ func (i *Installer) applyEnvironment(envVars []string) error {
 
 // Rollback restores all modified files to their original state.
 func (i *Installer) Rollback() error {
-	var lastErr error
+	// Use the rollback manager for comprehensive rollback
+	err := i.rollbackMgr.RollbackLast()
+	if err != nil {
+		return fmt.Errorf("rollback manager: %w", err)
+	}
 
-	// Reverse order for rollback
+	// Also restore individual file changes (for files not covered by snapshot)
+	var lastErr error
 	for idx := len(i.changes) - 1; idx >= 0; idx-- {
 		change := i.changes[idx]
 
@@ -190,6 +293,7 @@ func (i *Installer) Rollback() error {
 	}
 
 	i.changes = nil
+	i.conflicts = nil
 	return lastErr
 }
 
