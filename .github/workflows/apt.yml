@@ -70,16 +70,16 @@ jobs:
         run: |
           cd apt/dists/stable
           DATE=$(date -Ru)
-          cat > Release <<EOF
-Origin: ForgeKit
-Label: ForgeKit
-Suite: stable
-Codename: stable
-Architectures: amd64
-Components: main
-Description: ForgeKit APT Repository
-Date: $DATE
-EOF
+          printf '%s\n' \
+            "Origin: ForgeKit" \
+            "Label: ForgeKit" \
+            "Suite: stable" \
+            "Codename: stable" \
+            "Architectures: amd64" \
+            "Components: main" \
+            "Description: ForgeKit APT Repository" \
+            "Date: $DATE" \
+            > Release
           # Add hashes
           apt-ftparchive release . >> Release
 
