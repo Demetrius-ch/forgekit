@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/Demetrius-ch/forgekit/internal/feature"
 	"github.com/Demetrius-ch/forgekit/internal/template"
@@ -126,11 +125,24 @@ func (SwaggerFeature) Apply(ctx context.Context, project feature.ProjectContext,
 		return fmt.Errorf("mettre à jour l'environnement : %w", err)
 	}
 
-	if err := integrateMainGo(project.Root, project.Module); err != nil {
+	// Integrate into main.go using shared utility - blank import for swagger
+	if err := feature.IntegrateMainGo(project.Root, feature.MainIntegration{
+		ModulePath:   project.Module,
+		ImportPath:   project.Module + "/internal/swagger",
+		ImportCheck:  `swagger`,
+		BlankImport:  true,
+		Replacements: []feature.MainReplacement{},
+	}); err != nil {
 		return fmt.Errorf("intégrer dans main.go : %w", err)
 	}
 
-	if err := integrateRouterGo(project.Root, project.Module); err != nil {
+	// Integrate into router.go using shared utility
+	if err := feature.IntegrateRouterGo(project.Root, feature.RouterIntegration{
+		ModulePath:      project.Module,
+		ImportPath:      project.Module + "/internal/swagger",
+		MiddlewareCall:  "swagger.RegisterRoutes(r)",
+		MiddlewareCheck: "swagger.RegisterRoutes",
+	}); err != nil {
 		return fmt.Errorf("intégrer dans router.go : %w", err)
 	}
 
@@ -165,6 +177,27 @@ func (SwaggerFeature) Remove(ctx context.Context, project feature.ProjectContext
 		// Directory not empty or other error, ignore
 	}
 
+	// Remove router.go integration
+	if err := feature.RemoveRouterGo(project.Root, feature.RouterIntegration{
+		ModulePath:      project.Module,
+		ImportPath:      project.Module + "/internal/swagger",
+		MiddlewareCall:  "swagger.RegisterRoutes(r)",
+		MiddlewareCheck: "swagger.RegisterRoutes",
+	}); err != nil {
+		return fmt.Errorf("supprimer intégration router.go : %w", err)
+	}
+
+	// Remove main.go integration (blank import)
+	if err := feature.RemoveMainGo(project.Root, feature.MainIntegration{
+		ModulePath:   project.Module,
+		ImportPath:   project.Module + "/internal/swagger",
+		ImportCheck:  `swagger`,
+		BlankImport:  true,
+		Replacements: []feature.MainReplacement{},
+	}); err != nil {
+		return fmt.Errorf("supprimer intégration main.go : %w", err)
+	}
+
 	// Remove dependencies from go.mod
 	for _, dep := range plan.Dependencies {
 		cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
@@ -194,98 +227,6 @@ func (SwaggerFeature) Remove(ctx context.Context, project feature.ProjectContext
 	// Remove installation record
 	if err := feature.RemoveInstalledFeature(project.Root, "swagger"); err != nil {
 		return fmt.Errorf("supprimer l'enregistrement d'installation : %w", err)
-	}
-
-	return nil
-}
-
-func integrateMainGo(projectRoot, modulePath string) error {
-	mainPath := filepath.Join(projectRoot, "cmd", "server", "main.go")
-	content, err := os.ReadFile(mainPath)
-	if err != nil {
-		return fmt.Errorf("lire main.go : %w", err)
-	}
-
-	src := string(content)
-
-	// Check if already integrated
-	if strings.Contains(src, "swagger") && strings.Contains(src, `"`+modulePath+`/internal/swagger"`) {
-		return nil // Already integrated
-	}
-
-	// Add swagger import
-	importBlock := `import (`
-	newImport := importBlock + "\n\t" + `_ "` + modulePath + "/internal/swagger" + `"`
-	src = strings.Replace(src, importBlock, newImport, 1)
-
-	// Remove unused import if present (log/slog or logging might be there)
-	// This is handled by go mod tidy/gofmt later
-
-	if err := os.WriteFile(mainPath, []byte(src), 0o644); err != nil {
-		return fmt.Errorf("écrire main.go : %w", err)
-	}
-
-	return nil
-}
-
-func integrateRouterGo(projectRoot, modulePath string) error {
-	routerPath := filepath.Join(projectRoot, "internal", "transport", "http", "router.go")
-	content, err := os.ReadFile(routerPath)
-	if err != nil {
-		return fmt.Errorf("lire router.go : %w", err)
-	}
-
-	src := string(content)
-
-	// Check if already integrated
-	if strings.Contains(src, "swagger.RegisterRoutes") && strings.Contains(src, `"`+modulePath+`/internal/swagger"`) {
-		return nil // Already integrated
-	}
-
-	// Add swagger import
-	importBlock := `import (`
-	newImport := importBlock + "\n\t" + `"` + modulePath + "/internal/swagger" + `"`
-	src = strings.Replace(src, importBlock, newImport, 1)
-
-	// Add Swagger routes registration - insert after the route definitions
-	// Try multiple patterns to find the integration point
-	patterns := []struct {
-		oldStr string
-		newStr string
-	}{
-		// Pattern 1: Standard ForgeKit router with users route
-		{
-			oldStr: `	r.Post("/users", handler.NewUser(logger, userSvc).Create)`,
-			newStr: `	r.Post("/users", handler.NewUser(logger, userSvc).Create)
-
-	// Swagger documentation routes
-	swagger.RegisterRoutes(r)`,
-		},
-		// Pattern 2: Minimal router with only health route (test scenario)
-		{
-			oldStr: `	r.Get("/health", handler.NewHealth(logger, healthSvc).ServeHTTP)`,
-			newStr: `	r.Get("/health", handler.NewHealth(logger, healthSvc).ServeHTTP)
-
-	// Swagger documentation routes
-	swagger.RegisterRoutes(r)`,
-		},
-	}
-
-	integrated := false
-	for _, p := range patterns {
-		if strings.Contains(src, p.oldStr) {
-			src = strings.Replace(src, p.oldStr, p.newStr, 1)
-			integrated = true
-			break
-		}
-	}
-
-	if !integrated {
-		return fmt.Errorf("point d'intégration router.go introuvable : routes")
-	}
-
-	if err := os.WriteFile(routerPath, []byte(src), 0o644); err != nil {
-		return fmt.Errorf("écrire router.go : %w", err)
 	}
 
 	return nil

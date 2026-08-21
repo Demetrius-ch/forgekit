@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/Demetrius-ch/forgekit/internal/feature"
 	"github.com/Demetrius-ch/forgekit/internal/template"
@@ -124,7 +123,13 @@ func (CorsFeature) Apply(ctx context.Context, project feature.ProjectContext, pl
 		return fmt.Errorf("mettre à jour l'environnement : %w", err)
 	}
 
-	if err := integrateRouterGo(project.Root, project.Module); err != nil {
+	// Integrate into router.go using shared utility
+	if err := feature.IntegrateRouterGo(project.Root, feature.RouterIntegration{
+		ModulePath:      project.Module,
+		ImportPath:      project.Module + "/internal/cors",
+		MiddlewareCall:  "cors.Middleware()",
+		MiddlewareCheck: "cors.Middleware()",
+	}); err != nil {
 		return fmt.Errorf("intégrer dans router.go : %w", err)
 	}
 
@@ -159,6 +164,33 @@ func (CorsFeature) Remove(ctx context.Context, project feature.ProjectContext, p
 		// Directory not empty or other error, ignore
 	}
 
+	// Remove router.go integration
+	if err := feature.RemoveRouterGo(project.Root, feature.RouterIntegration{
+		ModulePath:      project.Module,
+		ImportPath:      project.Module + "/internal/cors",
+		MiddlewareCall:  "cors.Middleware()",
+		MiddlewareCheck: "cors.Middleware()",
+	}); err != nil {
+		return fmt.Errorf("supprimer intégration router.go : %w", err)
+	}
+
+	// Remove main.go integration
+	if err := feature.RemoveMainGo(project.Root, feature.MainIntegration{
+		ModulePath:  project.Module,
+		ImportPath:  project.Module + "/internal/cors",
+		ImportCheck: "cors",
+		Replacements: []feature.MainReplacement{
+			{
+				OldStr: `import (`,
+				NewStr: `import (
+	"` + project.Module + `/internal/cors"`,
+				Check: "import (",
+			},
+		},
+	}); err != nil {
+		return fmt.Errorf("supprimer intégration main.go : %w", err)
+	}
+
 	// Remove dependencies from go.mod
 	for _, dep := range plan.Dependencies {
 		cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
@@ -188,62 +220,6 @@ func (CorsFeature) Remove(ctx context.Context, project feature.ProjectContext, p
 	// Remove installation record
 	if err := feature.RemoveInstalledFeature(project.Root, "cors"); err != nil {
 		return fmt.Errorf("supprimer l'enregistrement d'installation : %w", err)
-	}
-
-	return nil
-}
-
-func integrateMainGo(projectRoot, modulePath string) error {
-	mainPath := filepath.Join(projectRoot, "cmd", "server", "main.go")
-	content, err := os.ReadFile(mainPath)
-	if err != nil {
-		return fmt.Errorf("lire main.go : %w", err)
-	}
-
-	src := string(content)
-
-	if strings.Contains(src, "cors") && strings.Contains(src, `"`+modulePath+`/internal/cors"`) {
-		return nil
-	}
-
-	importBlock := `import (`
-	newImport := importBlock + "\n\t" + `"` + modulePath + "/internal/cors" + `"`
-	src = strings.Replace(src, importBlock, newImport, 1)
-
-	if err := os.WriteFile(mainPath, []byte(src), 0o644); err != nil {
-		return fmt.Errorf("écrire main.go : %w", err)
-	}
-
-	return nil
-}
-
-func integrateRouterGo(projectRoot, modulePath string) error {
-	routerPath := filepath.Join(projectRoot, "internal", "transport", "http", "router.go")
-	content, err := os.ReadFile(routerPath)
-	if err != nil {
-		return fmt.Errorf("lire router.go : %w", err)
-	}
-
-	src := string(content)
-
-	if strings.Contains(src, "cors.Middleware") && strings.Contains(src, `"`+modulePath+`/internal/cors"`) {
-		return nil
-	}
-
-	importBlock := `import (`
-	newImport := importBlock + "\n\t" + `"` + modulePath + "/internal/cors" + `"`
-	src = strings.Replace(src, importBlock, newImport, 1)
-
-	oldMiddleware := `r.Use(middleware.Timeout(30 * time.Second))`
-	newMiddleware := `r.Use(middleware.Timeout(30 * time.Second))
-	r.Use(cors.Middleware())`
-	if !strings.Contains(src, oldMiddleware) {
-		return fmt.Errorf("point d'intégration router.go introuvable : middleware chain")
-	}
-	src = strings.Replace(src, oldMiddleware, newMiddleware, 1)
-
-	if err := os.WriteFile(routerPath, []byte(src), 0o644); err != nil {
-		return fmt.Errorf("écrire router.go : %w", err)
 	}
 
 	return nil

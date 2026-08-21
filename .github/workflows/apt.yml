@@ -1,0 +1,111 @@
+# .github/workflows/apt.yml
+# ForgeKit APT Repository Publishing Workflow
+# Triggers on release publication, builds APT repository, signs it, and deploys to GitHub Pages
+
+name: APT Repository
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-apt-repo:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: forgekit_*_linux_amd64.deb
+          merge-multiple: true
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Setup GPG
+        uses: actions/setup-gpg@v1
+        with:
+          gpg-private-key: ${{ secrets.FORGEKIT_APT_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.FORGEKIT_APT_GPG_PASSPHRASE }}
+
+      - name: Copy public key to repo
+        run: |
+          cp apt/gpg/forgekit-archive-keyring.gpg ./forgekit-archive-keyring.gpg
+
+      - name: Build APT repository structure
+        run: |
+          mkdir -p apt/pool/main/f/forge
+          mkdir -p apt/dists/stable/main/binary-amd64
+          mkdir -p apt/gpg
+
+      - name: Copy .deb to pool
+        run: |
+          cp artifacts/forgekit_*_linux_amd64.deb apt/pool/main/f/forge/forge_${{ github.event.release.tag_name }}_amd64.deb
+
+      - name: Generate Packages
+        run: |
+          cd apt
+          dpkg-scanpackages pool/main/f/forge /dev/null > dists/stable/main/binary-amd64/Packages
+          gzip -c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
+
+      - name: Generate Release file
+        run: |
+          cd apt/dists/stable
+          cat > Release <<EOF
+Origin: ForgeKit
+Label: ForgeKit
+Suite: stable
+Codename: stable
+Architectures: amd64
+Components: main
+Description: ForgeKit APT Repository
+Date: $(date -Ru)
+EOF
+          # Add hashes
+          apt-ftparchive release . >> Release
+
+      - name: Sign Release file (InRelease)
+        run: |
+          cd apt/dists/stable
+          gpg --clearsign -o InRelease Release
+
+      - name: Copy public key to repo root
+        run: |
+          cp apt/gpg/forgekit-archive-keyring.gpg ./forgekit-archive-keyring.gpg
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apt
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Verify deployment
+        run: |
+          echo "APT repository deployed to ${{ steps.deployment.outputs.page_url }}"
+          echo "Repository URL: https://demetrius-ch.github.io/forgekit/"
+          echo "Key URL: https://demetrius-ch.github.io/forgekit/forgekit-archive-keyring.gpg"

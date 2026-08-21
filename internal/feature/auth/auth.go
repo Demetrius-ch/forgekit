@@ -29,6 +29,11 @@ func (AuthFeature) Version() string {
 	return "1.0.0"
 }
 
+// DependsOn returns the list of features this feature depends on.
+func (AuthFeature) DependsOn() []string {
+	return []string{}
+}
+
 // Check verifies prerequisites for installing auth.
 func (AuthFeature) Check(ctx context.Context, project feature.ProjectContext) error {
 	// Check if already installed

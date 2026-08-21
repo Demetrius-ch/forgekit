@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Demetrius-ch/forgekit/internal/config"
 	"github.com/Demetrius-ch/forgekit/internal/feature"
 	"github.com/Demetrius-ch/forgekit/internal/report"
 )
@@ -18,28 +17,43 @@ import (
 var secretPatterns = []*regexp.Regexp{
 	// AWS Access Key ID
 	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
+	// AWS Secret Access Key
+	regexp.MustCompile(`[A-Za-z0-9/+=]{40}`),
 	// Private keys
 	regexp.MustCompile(`-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----`),
 	// Generic high-entropy strings that look like secrets (min 20 chars, high entropy)
 	regexp.MustCompile(`(?i)(api[_-]?key|secret|password|token|private[_-]?key|access[_-]?token)\s*[:=]\s*["'][A-Za-z0-9_\-\.]{20,}["']`),
 	// Generic assignment with high entropy value (base64-like, 32+ chars)
 	regexp.MustCompile(`(?i)(api[_-]?key|secret|password|token|private[_-]?key|access[_-]?token)\s*[:=]\s*[A-Za-z0-9+/=]{32,}`),
+	// JWT tokens
+	regexp.MustCompile(`eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}`),
+	// Database connection strings with passwords
+	regexp.MustCompile(`(?i)(postgres|mysql|mongodb|redis)://[^:]+:[^@]+@`),
+	// Generic key=value with high entropy (32+ chars)
+	regexp.MustCompile(`(?i)(key|secret|password|token|api[_-]?key)\s*[:=]\s*[A-Za-z0-9+/=_\-]{32,}`),
 }
 
 // Common false positive patterns to exclude
 var falsePositivePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(changeme|your_|example|test|dummy|placeholder|xxx|todo|fixme)`),
 	regexp.MustCompile(`(?i)(password|secret|token)\s*[:=]\s*["']?\$`), // Template variables like ${PASSWORD}
-	regexp.MustCompile(`["']?\$\{`), // Template syntax
+	regexp.MustCompile(`["']?\$\{`),                                    // Template syntax
+	regexp.MustCompile(`(?i)test`),                                     // Test files
+	regexp.MustCompile(`(?i)mock`),                                     // Mock data
+	regexp.MustCompile(`(?i)example`),                                  // Example code
+	regexp.MustCompile(`(?i)placeholder`),                              // Placeholders
+	regexp.MustCompile(`(?i)dummy`),                                    // Dummy values
 }
 
 // SecuritySecretsRule detects potential hardcoded secrets with reduced false positives.
 type SecuritySecretsRule struct{}
 
-func (SecuritySecretsRule) ID() string          { return "security.secrets" }
-func (SecuritySecretsRule) Name() string        { return "Secrets potentiels" }
-func (SecuritySecretsRule) Description() string { return "Détection de secrets en dur dans le code (heuristique améliorée)" }
-func (SecuritySecretsRule) Category() string    { return "security" }
+func (SecuritySecretsRule) ID() string   { return "security.secrets" }
+func (SecuritySecretsRule) Name() string { return "Secrets potentiels" }
+func (SecuritySecretsRule) Description() string {
+	return "Détection de secrets en dur dans le code (heuristique améliorée)"
+}
+func (SecuritySecretsRule) Category() string { return "security" }
 func (SecuritySecretsRule) Severity() report.Severity {
 	return report.SeverityWarning
 }
@@ -200,38 +214,230 @@ func (GracefulShutdownRule) Run(_ context.Context, rctx Context) ([]report.Findi
 	}}, nil
 }
 
-func DoctorRules() *Registry {
-	return NewRegistry(
-		GoVersionRule{},
-		GitRule{},
-		DockerRule{},
-		GoModRule{},
-		EnvFileRule{},
-		SecuritySensitiveFilesRule{},
-		GracefulShutdownRule{},
-		PostgreSQLRule{},
-		DependenciesRule{},
-		FeaturesConsistencyRule{},
-		ConfigValidationRule{},
-	)
+type SecuritySQLInjectionRule struct{}
+
+func (SecuritySQLInjectionRule) ID() string   { return "security.sql_injection" }
+func (SecuritySQLInjectionRule) Name() string { return "Injection SQL potentielle" }
+func (SecuritySQLInjectionRule) Description() string {
+	return "Détecte les concaténations SQL dangereuses"
+}
+func (SecuritySQLInjectionRule) Category() string { return "security" }
+func (SecuritySQLInjectionRule) Severity() report.Severity {
+	return report.SeverityError
 }
 
-func AnalyzeRules(cfg configLoader) *Registry {
-	return NewRegistry(
-		GoModRule{},
-		ArchitectureRule{Rules: cfg.ArchitectureRules()},
-		SecuritySecretsRule{},
-		SecurityCORSRule{},
-	)
+func (r SecuritySQLInjectionRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	var findings []report.Finding
+	_ = filepath.WalkDir(rctx.ProjectRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		data, _ := os.ReadFile(path)
+		content := string(data)
+
+		// Skip test files
+		if strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		// Patterns for potential SQL injection
+		patterns := []*regexp.Regexp{
+			regexp.MustCompile(`fmt\.Sprintf\([^)]*%[sq][^)]*\)`),        // fmt.Sprintf with %s or %q in SQL
+			regexp.MustCompile(`fmt\.Printf\([^)]*%[sq][^)]*\)`),         // fmt.Printf with %s or %q in SQL
+			regexp.MustCompile(`strings\.Join\([^)]*\)`),                 // strings.Join for SQL building
+			regexp.MustCompile(`\+\s*["'].*SELECT|INSERT|UPDATE|DELETE`), // String concatenation with SQL
+			regexp.MustCompile(`query\s*:=\s*["'].*%s.*["']`),            // Query with fmt placeholder
+			regexp.MustCompile(`db\.Query\([^)]*\+`),                     // db.Query with concatenation
+			regexp.MustCompile(`db\.Exec\([^)]*\+`),                      // db.Exec with concatenation
+		}
+
+		for _, re := range patterns {
+			if re.MatchString(content) {
+				rel, _ := filepath.Rel(rctx.ProjectRoot, path)
+				findings = append(findings, report.Finding{
+					ID:          "security.sql_injection",
+					Category:    "security",
+					Severity:    report.SeverityWarning,
+					File:        rel,
+					Message:     "Pattern potentiel d'injection SQL détecté",
+					Explanation: "Utilisez des requêtes paramétrées (db.Query/Exec avec $1, $2) au lieu de concaténation",
+					Suggestion:  "Remplacez la concaténation de chaînes par des requêtes préparées avec $1, $2, etc.",
+				})
+				break // Only report first match per file
+			}
+		}
+		return nil
+	})
+	return findings, nil
+}
+
+// SecurityXSSRule detects potential XSS vulnerabilities.
+type SecurityXSSRule struct{}
+
+func (SecurityXSSRule) ID() string   { return "security.xss" }
+func (SecurityXSSRule) Name() string { return "XSS potentiel" }
+func (SecurityXSSRule) Description() string {
+	return "Détecte les sorties non échappées dans les handlers HTTP"
+}
+func (SecurityXSSRule) Category() string { return "security" }
+func (SecurityXSSRule) Severity() report.Severity {
+	return report.SeverityWarning
+}
+
+func (r SecurityXSSRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	var findings []report.Finding
+	_ = filepath.WalkDir(rctx.ProjectRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		data, _ := os.ReadFile(path)
+		content := string(data)
+
+		// Skip test files
+		if strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		// Look for direct user input in HTTP responses
+		patterns := []*regexp.Regexp{
+			regexp.MustCompile(`w\.Write\([^)]*r\.FormValue`),       // Direct form value in Write
+			regexp.MustCompile(`w\.Write\([^)]*r\.URL\.Query`),      // Direct query param in Write
+			regexp.MustCompile(`fmt\.Fprintf\(w,[^)]*r\.FormValue`), // FormValue in Fprintf to ResponseWriter
+			regexp.MustCompile(`w\.WriteHeader\(\d+\)`),             // WriteHeader without content-type
+		}
+
+		for _, re := range patterns {
+			if re.MatchString(content) {
+				rel, _ := filepath.Rel(rctx.ProjectRoot, path)
+				findings = append(findings, report.Finding{
+					ID:          "security.xss",
+					Category:    "security",
+					Severity:    report.SeverityWarning,
+					File:        rel,
+					Message:     "Pattern potentiel XSS détecté",
+					Explanation: "Les entrées utilisateur doivent être échappées avant d'être incluses dans les réponses HTTP",
+					Suggestion:  "Utilisez html/template avec auto-escaping ou échappez manuellement les entrées",
+				})
+				break
+			}
+		}
+		return nil
+	})
+	return findings, nil
+}
+
+// SecurityHardcodedIPRule detects hardcoded IP addresses.
+type SecurityHardcodedIPRule struct{}
+
+func (SecurityHardcodedIPRule) ID() string          { return "security.hardcoded_ip" }
+func (SecurityHardcodedIPRule) Name() string        { return "Adresses IP en dur" }
+func (SecurityHardcodedIPRule) Description() string { return "Détecte les adresses IP codées en dur" }
+func (SecurityHardcodedIPRule) Category() string    { return "security" }
+func (SecurityHardcodedIPRule) Severity() report.Severity {
+	return report.SeverityWarning
+}
+
+func (r SecurityHardcodedIPRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	var findings []report.Finding
+	ipPattern := regexp.MustCompile(`\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b`)
+	_ = filepath.WalkDir(rctx.ProjectRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		// Skip test files
+		if strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, _ := os.ReadFile(path)
+		content := string(data)
+
+		// Look for hardcoded IPs (excluding localhost and common patterns)
+		matches := ipPattern.FindAllString(content, -1)
+		for _, match := range matches {
+			if match != "127.0.0.1" && match != "0.0.0.0" && match != "::1" {
+				rel, _ := filepath.Rel(rctx.ProjectRoot, path)
+				findings = append(findings, report.Finding{
+					ID:          "security.hardcoded_ip",
+					Category:    "security",
+					Severity:    report.SeverityWarning,
+					File:        rel,
+					Message:     fmt.Sprintf("Adresse IP en dur détectée: %s", match),
+					Explanation: "Les adresses IP en dur empêchent la portabilité et la configuration par environnement",
+					Suggestion:  "Utilisez des variables d'environnement pour les adresses de service",
+				})
+			}
+		}
+		return nil
+	})
+	return findings, nil
+}
+
+// SecurityWeakCryptoRule detects weak cryptographic practices.
+type SecurityWeakCryptoRule struct{}
+
+func (SecurityWeakCryptoRule) ID() string   { return "security.weak_crypto" }
+func (SecurityWeakCryptoRule) Name() string { return "Cryptographie faible" }
+func (SecurityWeakCryptoRule) Description() string {
+	return "Détecte l'utilisation de MD5, SHA1, etc."
+}
+func (SecurityWeakCryptoRule) Category() string { return "security" }
+func (SecurityWeakCryptoRule) Severity() report.Severity {
+	return report.SeverityError
+}
+
+func (r SecurityWeakCryptoRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	var findings []report.Finding
+	_ = filepath.WalkDir(rctx.ProjectRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		// Skip test files
+		if strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, _ := os.ReadFile(path)
+		content := string(data)
+
+		weakAlgorithms := []struct {
+			pattern *regexp.Regexp
+			name    string
+		}{
+			{regexp.MustCompile(`crypto/md5`), "MD5"},
+			{regexp.MustCompile(`crypto/sha1`), "SHA1"},
+			{regexp.MustCompile(`md5\.Sum`), "MD5"},
+			{regexp.MustCompile(`sha1\.Sum`), "SHA1"},
+			{regexp.MustCompile(`DES|3DES`), "DES/3DES"},
+			{regexp.MustCompile(`RC4`), "RC4"},
+		}
+
+		for _, algo := range weakAlgorithms {
+			if algo.pattern.MatchString(content) {
+				rel, _ := filepath.Rel(rctx.ProjectRoot, path)
+				findings = append(findings, report.Finding{
+					ID:          "security.weak_crypto",
+					Category:    "security",
+					Severity:    report.SeverityError,
+					File:        rel,
+					Message:     fmt.Sprintf("Algorithme cryptographique faible détecté: %s", algo.name),
+					Explanation: fmt.Sprintf("%s est considéré comme cryptographiquement cassé", algo.name),
+					Suggestion:  "Utilisez SHA-256, SHA-3, AES-GCM, ou ChaCha20-Poly1305",
+				})
+			}
+		}
+		return nil
+	})
+	return findings, nil
 }
 
 // PostgreSQLRule checks PostgreSQL connectivity and configuration.
 type PostgreSQLRule struct{}
 
-func (PostgreSQLRule) ID() string          { return "postgres.connection" }
-func (PostgreSQLRule) Name() string        { return "PostgreSQL" }
-func (PostgreSQLRule) Description() string { return "Vérifie la connectivité et la configuration PostgreSQL" }
-func (PostgreSQLRule) Category() string    { return "postgresql" }
+func (PostgreSQLRule) ID() string   { return "postgres.connection" }
+func (PostgreSQLRule) Name() string { return "PostgreSQL" }
+func (PostgreSQLRule) Description() string {
+	return "Vérifie la connectivité et la configuration PostgreSQL"
+}
+func (PostgreSQLRule) Category() string { return "postgresql" }
 func (PostgreSQLRule) Severity() report.Severity {
 	return report.SeverityWarning
 }
@@ -268,7 +474,7 @@ func (r PostgreSQLRule) Run(_ context.Context, rctx Context) ([]report.Finding, 
 		} else {
 			findings = append(findings, report.Finding{
 				ID: "postgres.env.missing", Category: "postgresql", Severity: report.SeverityWarning,
-				Message: "Variables PostgreSQL manquantes dans .env.example",
+				Message:    "Variables PostgreSQL manquantes dans .env.example",
 				Suggestion: "Ajoutez POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB",
 			})
 		}
@@ -286,7 +492,7 @@ func (r PostgreSQLRule) Run(_ context.Context, rctx Context) ([]report.Finding, 
 	if len(findings) == 0 {
 		findings = append(findings, report.Finding{
 			ID: "postgres.not_configured", Category: "postgresql", Severity: report.SeverityWarning,
-			Message: "PostgreSQL non configuré détecté",
+			Message:    "PostgreSQL non configuré détecté",
 			Suggestion: "Vérifiez docker-compose.yml et .env.example pour la configuration PostgreSQL",
 		})
 	}
@@ -314,7 +520,7 @@ func (r DependenciesRule) Run(_ context.Context, rctx Context) ([]report.Finding
 		if os.IsNotExist(err) {
 			findings = append(findings, report.Finding{
 				ID: "deps.gomod.missing", Category: "dependencies", Severity: report.SeverityError,
-				Message: "go.mod manquant",
+				Message:    "go.mod manquant",
 				Suggestion: "Exécutez 'go mod init' ou 'forge init'",
 			})
 			return findings, nil
@@ -328,7 +534,7 @@ func (r DependenciesRule) Run(_ context.Context, rctx Context) ([]report.Finding
 		if os.IsNotExist(err) {
 			findings = append(findings, report.Finding{
 				ID: "deps.gosum.missing", Category: "dependencies", Severity: report.SeverityWarning,
-				Message: "go.sum manquant",
+				Message:    "go.sum manquant",
 				Suggestion: "Exécutez 'go mod tidy' pour générer go.sum",
 			})
 		} else {
@@ -382,10 +588,12 @@ func (r DependenciesRule) Run(_ context.Context, rctx Context) ([]report.Finding
 // FeaturesConsistencyRule checks consistency of installed features.
 type FeaturesConsistencyRule struct{}
 
-func (FeaturesConsistencyRule) ID() string          { return "features.consistency" }
-func (FeaturesConsistencyRule) Name() string        { return "Cohérence des features" }
-func (FeaturesConsistencyRule) Description() string { return "Vérifie que les features déclarées sont bien installées" }
-func (FeaturesConsistencyRule) Category() string    { return "features" }
+func (FeaturesConsistencyRule) ID() string   { return "features.consistency" }
+func (FeaturesConsistencyRule) Name() string { return "Cohérence des features" }
+func (FeaturesConsistencyRule) Description() string {
+	return "Vérifie que les features déclarées sont bien installées"
+}
+func (FeaturesConsistencyRule) Category() string { return "features" }
 func (FeaturesConsistencyRule) Severity() report.Severity {
 	return report.SeverityWarning
 }
@@ -451,7 +659,7 @@ func (r ConfigValidationRule) Run(_ context.Context, rctx Context) ([]report.Fin
 		if os.IsNotExist(err) {
 			findings = append(findings, report.Finding{
 				ID: "config.forgeyaml.missing", Category: "configuration", Severity: report.SeverityWarning,
-				Message: "forge.yaml manquant",
+				Message:    "forge.yaml manquant",
 				Suggestion: "Exécutez 'forge config init' pour créer la configuration par défaut",
 			})
 		} else {
@@ -476,7 +684,7 @@ func (r ConfigValidationRule) Run(_ context.Context, rctx Context) ([]report.Fin
 			} else {
 				findings = append(findings, report.Finding{
 					ID: "config.forgeyaml.incomplete", Category: "configuration", Severity: report.SeverityWarning,
-					Message: "forge.yaml incomplet: sections architecture/project manquantes",
+					Message:    "forge.yaml incomplet: sections architecture/project manquantes",
 					Suggestion: "Vérifiez la structure de forge.yaml",
 				})
 			}
@@ -489,7 +697,7 @@ func (r ConfigValidationRule) Run(_ context.Context, rctx Context) ([]report.Fin
 		if os.IsNotExist(err) {
 			findings = append(findings, report.Finding{
 				ID: "config.envexample.missing", Category: "configuration", Severity: report.SeverityWarning,
-				Message: ".env.example manquant",
+				Message:    ".env.example manquant",
 				Suggestion: "Créez un fichier .env.example pour documenter les variables d'environnement",
 			})
 		} else {
@@ -506,33 +714,11 @@ func (r ConfigValidationRule) Run(_ context.Context, rctx Context) ([]report.Fin
 		} else {
 			findings = append(findings, report.Finding{
 				ID: "config.envexample.empty", Category: "configuration", Severity: report.SeverityWarning,
-				Message: ".env.example vide",
+				Message:    ".env.example vide",
 				Suggestion: "Ajoutez les variables d'environnement nécessaires",
 			})
 		}
 	}
 
 	return findings, nil
-}
-
-func CheckRules(cfg configLoader) *Registry {
-	return NewRegistry(
-		ArchitectureRule{Rules: cfg.ArchitectureRules()},
-	)
-}
-
-type configLoader interface {
-	ArchitectureRules() []config.ArchitectureRule
-}
-
-// StaticConfigLoader wraps fixed rules for tests.
-type StaticConfigLoader struct {
-	Rules []config.ArchitectureRule
-}
-
-func (s StaticConfigLoader) ArchitectureRules() []config.ArchitectureRule {
-	if len(s.Rules) == 0 {
-		return config.DefaultArchitectureRules()
-	}
-	return s.Rules
 }

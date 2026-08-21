@@ -42,23 +42,61 @@ and get a structured Go backend ready for development.
 - Automatic Go formatting
 - Architecture validation
 - Development environment diagnostics
-- Project analysis
+- Project analysis with scoring
 - Human-readable or JSON output
 - Extensible CLI architecture
-- **Feature system (`forge add`) for extending generated projects**
+- **Feature system (`forge add` / `forge remove`) for extending generated projects**
 - **JWT authentication infrastructure (`forge add auth`)**
+- **CORS middleware (`forge add cors`)**
+- **Structured logging (`forge add logging`)**
+- **Swagger/OpenAPI documentation (`forge add swagger`)**
+- **CI/CD integration with `--ci` mode**
+- **Project diagnostics with `forge doctor`**
+- **Feature version tracking and rollback**
 
 ---
 
 ## Installation
 
-### Linux (Debian/Ubuntu) — Recommended
+### Linux (Debian/Ubuntu) — Recommended (APT)
+
+Install ForgeKit from the official APT repository:
+
+```bash
+# 1. Add the ForgeKit GPG key
+curl -fsSL https://demetrius-ch.github.io/forgekit/gpg/forgekit-archive-keyring.gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/forgekit.gpg
+
+# 2. Add the APT repository
+echo "deb [signed-by=/usr/share/keyrings/forgekit.gpg] https://demetrius-ch.github.io/forgekit stable main" \
+  | sudo tee /etc/apt/sources.list.d/forgekit.list
+
+# 3. Update and install
+sudo apt update
+sudo apt install forge
+
+# 4. Verify installation
+forge version
+```
+
+Uninstall:
+
+```bash
+sudo apt remove forge
+# Optionally remove the repository and key
+sudo rm /etc/apt/sources.list.d/forgekit.list /usr/share/keyrings/forgekit.gpg
+sudo apt update
+```
+
+### Linux (Debian/Ubuntu) — Manual `.deb` download
 
 Download the latest `.deb` package from [GitHub Releases](https://github.com/Demetrius-ch/forgekit/releases):
 
 ```bash
-wget https://github.com/Demetrius-ch/forgekit/releases/download/v0.3.0/forge_0.3.0_linux_amd64.deb
-sudo dpkg -i forge_0.3.0_linux_amd64.deb
+# Replace VERSION with the desired version (e.g., 0.3.0)
+VERSION=0.3.0
+wget https://github.com/Demetrius-ch/forgekit/releases/download/v${VERSION}/forge_${VERSION}_linux_amd64.deb
+sudo dpkg -i forge_${VERSION}_linux_amd64.deb
 forge version
 ```
 
@@ -106,8 +144,10 @@ forge version
 Download the static binary from [GitHub Releases](https://github.com/Demetrius-ch/forgekit/releases):
 
 ```bash
-wget https://github.com/Demetrius-ch/forgekit/releases/download/v0.3.0/forge_0.3.0_linux_amd64.tar.gz
-tar -xzf forge_0.3.0_linux_amd64.tar.gz
+# Replace VERSION with the desired version (e.g., 0.3.0)
+VERSION=0.3.0
+wget https://github.com/Demetrius-ch/forgekit/releases/download/v${VERSION}/forge_${VERSION}_linux_amd64.tar.gz
+tar -xzf forge_${VERSION}_linux_amd64.tar.gz
 sudo mv forge /usr/local/bin/
 forge version
 ```
@@ -115,7 +155,7 @@ forge version
 Verify checksums (SHA256):
 
 ```bash
-wget https://github.com/Demetrius-ch/forgekit/releases/download/v0.3.0/checksums.txt
+wget https://github.com/Demetrius-ch/forgekit/releases/download/v${VERSION}/checksums.txt
 sha256sum -c checksums.txt
 ```
 
@@ -300,7 +340,7 @@ Expected response:
 
 ## Extend a generated project with `forge add`
 
-ForgeKit v0.2.0 introduces an extensible feature system to add capabilities to existing projects.
+ForgeKit introduces an extensible feature system to add capabilities to existing projects.
 
 ### List available features
 
@@ -313,44 +353,43 @@ Output:
 ```text
 ForgeKit Features
 ────────────────────────────────
-auth 1.0.0 — Infrastructure d'authentification JWT (middleware, validation de token)
+auth       1.0.0 — Infrastructure d'authentification JWT (middleware, validation de token)
+cors       1.0.2 — Middleware CORS pour les requêtes cross-origin
+logging    1.0.0 — Logging structuré et middleware HTTP
+swagger    1.0.1 — Documentation OpenAPI/Swagger
 ```
 
-### Preview a feature installation (dry-run)
+Each feature shows its name, version, description, and dependencies (if any).
+
+### Preview a feature installation (plan mode)
 
 ```bash
-forge add auth --dry-run
+forge add auth --plan
 ```
 
 Output:
 
 ```text
-ForgeKit Add
+ForgeKit Plan
 ────────────────────────────────
 
-✓ Projet ForgeKit détecté
-✓ Feature "auth" trouvée
-✓ Prérequis validés
-✓ Plan validé
+Feature: auth
+Version: 1.0.0
 
+Changes:
+  + internal/auth/jwt.go
+  + internal/auth/middleware.go
 
-ForgeKit Add
-────────────────────────────────
-Feature : auth
-Version : 1.0.0
-
-Fichiers :
-  → internal/auth/jwt.go
-  → internal/auth/middleware.go
-
-Dépendances :
+Dependencies:
   → github.com/golang-jwt/jwt/v5 v5.2.0
 
-Variables d'environnement :
+Environment:
   → JWT_SECRET=your-secret-key-change-in-production
 
-Aucune modification effectuée (--dry-run).
+No files were modified.
 ```
+
+The `--plan` (or `--dry-run`) flag shows what would be created/modified/deleted without making any changes.
 
 ### Install a feature
 
@@ -415,6 +454,77 @@ Suppress non-essential output:
 forge add auth --quiet
 ```
 
+### Remove a feature
+
+```bash
+forge remove auth
+```
+
+Before removal, ForgeKit checks:
+1. Feature is installed
+2. No other installed features depend on it
+3. Detects user modifications to feature files
+
+Output:
+
+```text
+ForgeKit Remove
+────────────────────────────────
+
+✓ Projet ForgeKit détecté
+✓ Feature "auth" trouvée
+✓ Aucune feature dépendante
+
+Suppression...
+  ✓ Fichiers supprimés
+  ✓ Dépendances retirées
+  ✓ Projet validé
+
+────────────────────────────────
+✓ Feature "auth" supprimée avec succès
+```
+
+Preview removal with `--plan`:
+
+```bash
+forge remove auth --plan
+```
+
+### JSON output
+
+All commands support `--format json` for machine-readable output:
+
+```bash
+forge add --list --format json
+forge add auth --plan --format json
+forge remove auth --format json
+forge doctor --format json
+forge analyze --format json
+```
+
+Example JSON output:
+
+```json
+{
+  "schema_version": "1",
+  "tool": "forge",
+  "version": "0.3.0",
+  "command": "add",
+  "features": [
+    {"name": "auth", "version": "1.0.0", "description": "..."},
+    {"name": "cors", "version": "1.0.2", "description": "..."}
+  ]
+}
+```
+
+### Quiet mode
+
+Suppress non-essential output:
+
+```bash
+forge add auth --quiet
+```
+
 ---
 
 ## Validate a generated project
@@ -423,10 +533,33 @@ ForgeKit provides several commands to help developers verify their project.
 
 ### Doctor
 
-Check the development environment:
+Check the development environment and project health:
 
 ```bash
 forge doctor
+```
+
+Output includes:
+- ForgeKit version
+- `.forge` signature validation (valid, legacy, absent, invalid)
+- Installed feature versions (vs registry)
+- Go, Git, Docker availability
+- PostgreSQL configuration
+- Project structure (go.mod, .env, docker-compose.yml)
+- Architecture rules, security, dependencies, documentation
+
+**CI mode** (non-interactive, deterministic, exit codes):
+
+```bash
+forge doctor --ci
+```
+
+Exit codes: `0` = success, `1` = warnings/errors, `2` = execution error
+
+**JSON output**:
+
+```bash
+forge doctor --format json
 ```
 
 ### Check
@@ -439,10 +572,32 @@ forge check
 
 ### Analyze
 
-Analyze the project:
+Analyze the project structure and practices across categories:
+- Architecture
+- Tests
+- Security
+- Configuration
+- Docker
+- Documentation
 
 ```bash
 forge analyze
+```
+
+Output shows category scores (0-100), global score, and recommendations.
+
+**CI mode** (non-interactive, deterministic, exit codes):
+
+```bash
+forge analyze --ci
+```
+
+Exit codes: `0` = success, `1` = issues detected, `2` = execution error
+
+**JSON output**:
+
+```bash
+forge analyze --format json
 ```
 
 ### Run tests
@@ -479,6 +634,8 @@ completion
 config
 doctor
 init
+inspect
+remove
 version
 ```
 
@@ -490,43 +647,143 @@ Global options:
 --quiet
 ```
 
+**CI modes** (non-interactive, deterministic, exit codes 0/1/2):
+
+```bash
+forge doctor --ci
+forge analyze --ci
+```
+
 JSON output can be requested with:
 
 ```bash
 forge --format json doctor
+forge --format json analyze
+forge add --list --format json
+forge add auth --plan --format json
+forge remove auth --format json
 ```
 
 ---
 
 ## Feature system architecture
 
-ForgeKit v0.2.0 introduces a generic feature infrastructure in `internal/feature/`:
+ForgeKit introduces a generic feature infrastructure in `internal/feature/`:
 
 - **Feature interface** — Defines `Name()`, `Description()`, `Version()`, `Check()`, `Plan()`, `Apply()`
-- **ProjectContext** — Project metadata (root, module, Go version)
+- **FeatureDependencies** (optional) — Declares dependencies via `DependsOn() []string`
+- **FeatureRemover** (optional) — Supports removal via `Remove()`
+- **ProjectContext** — Project metadata (root, module, Go version, type)
 - **Manifest** — Feature resources (dependencies, files, environment variables)
-- **Plan** — Computed installation plan
-- **Registry** — Feature registration and discovery
-- **Detector** — Validates ForgeKit project structure
-- **Installer** — Applies plans with rollback support
-- **Installed tracking** — `.forge/features.yaml` records installed features
+- **Plan** — Computed installation/removal plan with conflict detection
+- **Registry** — Feature registration and dependency resolution (topological sort)
+- **Detector** — Validates ForgeKit project structure (ForgeKit, legacy, external compatible, invalid)
+- **Installer** — Applies plans with rollback support and idempotent operations
+- **Installed tracking** — `.forge/features.yaml` records installed features with versions
+
+### Feature dependencies
+
+Features can declare dependencies on other features:
+
+```go
+func (MyFeature) DependsOn() []string {
+    return []string{"auth"}  // auth must be installed first
+}
+```
+
+When installing a feature with dependencies:
+- Dependencies are automatically resolved and installed first
+- Topological sort ensures correct installation order
+- Circular dependencies are detected and rejected
+
+Current feature dependency graph:
+```
+auth (no deps)
+  └── cors (depends on auth)
+  └── logging (depends on auth)
+      └── swagger (depends on cors)
+```
+
+### .forge system
+
+The `.forge/` directory tracks project metadata and installed features:
+
+```
+.forge/
+├── forge.yaml      # Project metadata (version, schema, project name, type)
+└── features.yaml   # Installed features with versions and timestamps
+```
+
+**Signature validation** (used by `doctor`, `analyze`, `inspect`):
+- **Valid**: Both `forge.yaml` and `features.yaml` present, schema compatible
+- **Legacy**: Only `features.yaml` (v0.1.x projects)
+- **Absent**: No `.forge` directory (external projects)
+- **Invalid**: Directory exists but missing required files or schema incompatible
 
 ### Adding a new feature
 
 1. Implement the `Feature` interface in `internal/feature/<name>/`
 2. Add template files in `internal/template/api/internal/<name>/`
-3. Register the feature in `internal/cli/commands.go` in `newAddCommand()`
+3. Register the feature in `internal/cli/commands.go` in `newAddCommand()` and `newRemoveCommand()`
+
+---
+
+## Rollback System
+
+ForgeKit includes a rollback mechanism to restore project state when feature installation fails.
+
+### How it works
+
+1. **Before installation**: A complete snapshot is taken of:
+   - `go.mod` and `go.sum`
+   - `.env.example`
+   - `.forge/` directory (metadata and features.yaml)
+
+2. **On failure**: Automatic rollback restores all captured files
+
+3. **Verification**: Post-rollback verification ensures state matches the snapshot
+
+### Capabilities
+
+| Can Rollback | Cannot Rollback |
+|-------------|-----------------|
+| `go.mod` / `go.sum` content | Go module cache (GOMODCACHE) |
+| `.env.example` file content | Docker container state |
+| `.forge/forge.yaml` metadata | External databases |
+| `.forge/features.yaml` installed features | Git history |
+| Feature-generated files (`internal/*`) | System packages (apt/brew) |
+| | gofmt whitespace changes |
+
+### Limitations
+
+- **Not transactional**: External operations (`go get`, `go mod tidy`, Docker) cannot be fully undone
+- **Module cache**: `go get` downloads modules to GOMODCACHE which persists
+- **Docker**: Container state, volumes, and networks are not managed
+- **External services**: PostgreSQL databases, Redis, etc. are outside ForgeKit's control
+- **Git**: Commits, tags, branches are not modified by ForgeKit
+
+### Manual rollback
+
+If automatic rollback fails, restore from snapshot:
+
+```bash
+# Manual restoration from backups
+cp go.mod.bak go.mod
+cp go.sum.bak go.sum
+rm -rf .forge
+# Then restore from your backups
+```
 
 ---
 
 ## Limitations
 
-Current v0.2.0 limitations:
+Current v0.3.0 limitations:
 
-- Only `auth` feature is implemented
-- No `forge remove` command yet
 - No feature version upgrade path (manual intervention required)
 - Features must be registered in the CLI binary (no plugin system yet)
+- External project support is limited to compatible Go projects with Chi router
+- Rollback cannot undo external operations (Go module cache, Docker, databases)
 
 ---
 

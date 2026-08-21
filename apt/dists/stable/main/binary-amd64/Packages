@@ -1,0 +1,20 @@
+Package: forge
+Version: 0:0.3.0~SNAPSHOT-45c7ad7
+Architecture: amd64
+Architecture-Variant: amd64v1
+Maintainer: ForgeKit Maintainers <forgekit@demetrius-ch.github.io>
+Installed-Size: 12996
+Depends: libc6, ca-certificates
+Recommends: docker.io, docker-compose
+Filename: pool/main/f/forge/forge_0.3.0_amd64.deb
+Size: 4863158
+MD5sum: 5b3390b8fa95a56b56b492884f123caf
+SHA1: 274092fc536d4b2bb90bc88feed923dfdfbca62a
+SHA256: 2094d92a10295906b559f5df11079e0ad0af5d62d652836b9b8d2dbb7c139e84
+Section: devel
+Priority: optional
+Homepage: https://github.com/Demetrius-ch/forgekit
+Description: ForgeKit — Go Backend Generator
+ Build production-ready REST APIs with hexagonal architecture.
+ Scaffolds projects with PostgreSQL, Docker, migrations, tests.
+

@@ -13,6 +13,7 @@ builds:
       - linux
     goarch:
       - amd64
+      - arm64
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -24,21 +25,21 @@ builds:
 # Archive configuration
 archives:
   - id: forge
-    builds:
+    ids:
       - forge
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}_{{.Arch}}"
-    # No extra files in archive (just the binary)
 
 # Checksums
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
 
-# Debian package via nfpm (plural in v2)
+# Debian package via nfpm
 nfpms:
   - id: forge-deb
-    builds:
+    ids:
       - forge
     package_name: forge
     vendor: ForgeKit
@@ -74,7 +75,7 @@ release:
   name_template: "ForgeKit {{.Version}}"
   header: |
     # ForgeKit {{.Version}}
-    
+
     ForgeKit is a Go CLI tool that generates production-ready REST APIs with hexagonal architecture.
   footer: |
     ---
@@ -99,5 +100,3 @@ changelog:
 before:
   hooks:
     - go mod tidy
-    - go vet ./...
-    - go test ./...

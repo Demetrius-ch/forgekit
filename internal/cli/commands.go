@@ -652,9 +652,11 @@ func askExternalDatabase(g *globalFlags, databaseName, existingDBName string) (D
 }
 
 func newDoctorCommand(g *globalFlags) *cobra.Command {
-	return &cobra.Command{
+	var ciMode bool
+
+	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Diagnostiquer l'environnement et le projet",
+		Short: "Diagnostiquer l'environnement et le projet ForgeKit",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root, err := os.Getwd()
 			if err != nil {
@@ -662,10 +664,20 @@ func newDoctorCommand(g *globalFlags) *cobra.Command {
 			}
 			console := g.console()
 
+			// In CI mode, force quiet. Respect explicit --format json if provided.
+			if ciMode {
+				g.Quiet = true
+				// Don't override format if user explicitly requested JSON
+				// (We can't easily detect explicit flag, so check if format was changed from default)
+			}
+
+			// Get feature registry for version comparison
+			registry := feature.NewRegistry(auth.AuthFeature{}, cors.CorsFeature{}, logging.LoggingFeature{}, swagger.SwaggerFeature{})
+
 			sigResult := forge.ValidateSignature(root)
 
 			var spinner *output.Spinner
-			if g.Format == output.FormatHuman && !g.Quiet {
+			if g.Format == output.FormatHuman && !g.Quiet && !ciMode {
 				spinner = output.NewSpinner(console.Out)
 				spinner.Start("Vérification signature ForgeKit...")
 			}
@@ -722,13 +734,41 @@ func newDoctorCommand(g *globalFlags) *cobra.Command {
 				}
 			}
 
+			// Add ForgeKit version finding
+			sigFindings = append(sigFindings, report.Finding{
+				ID:       "forge.version",
+				Category: "forge",
+				Severity: report.SeverityInfo,
+				Message:  fmt.Sprintf("ForgeKit version: %s", app.Version),
+			})
+
+			// Add feature version comparison findings
+			featFindings := compareFeatureVersions(root, registry, sigResult.Features)
+			sigFindings = append(sigFindings, featFindings...)
+
+			if ciMode {
+				// In CI mode, run rules and produce compact output
+				reg := rules.DoctorRules()
+				return checkDoctorExitCode(g, root, sigFindings, reg)
+			}
+
 			reg := rules.DoctorRules()
 			if err := runReport(g, "doctor", root, reg, sigFindings); err != nil {
 				return err
 			}
+
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolVar(
+		&ciMode,
+		"ci",
+		false,
+		"Mode CI/CD: non-interactif, déterministe, codes de sortie 0/1/2, sans spinners",
+	)
+
+	return cmd
 }
 
 func newAnalyzeCommand(g *globalFlags) *cobra.Command {
@@ -828,10 +868,11 @@ func newAnalyzeCommand(g *globalFlags) *cobra.Command {
 func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, extraFindings []report.Finding, ciMode bool) error {
 	console := g.console()
 
-	// In CI mode, force quiet and human format for compact output
+	// In CI mode, force quiet. Don't override format if user explicitly requested JSON.
+	// Use local variable for format checks in CI mode.
+	ciFormat := g.Format
 	if ciMode {
 		g.Quiet = true
-		g.Format = output.FormatHuman
 	}
 
 	categories := []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"}
@@ -842,7 +883,7 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 	for _, cat := range categories {
 		// spinner per category (human only, not in CI mode)
 		var spinner *output.Spinner
-		if g.Format == output.FormatHuman && !g.Quiet && !ciMode {
+		if ciFormat == output.FormatHuman && !g.Quiet && !ciMode {
 			spinner = output.NewSpinner(console.Out)
 			spinner.Start("Analyse " + cat + "...")
 		}
@@ -887,7 +928,7 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 				final = "✗ " + cat + " — " + fmt.Sprintf("%d/100", s)
 			}
 			spinner.Stop(final)
-		} else if ciMode && g.Format == output.FormatHuman {
+		} else if ciMode && ciFormat == output.FormatHuman {
 			// In CI mode, print compact category status
 			temp := report.Result{Project: root, Findings: append(append([]report.Finding(nil), allFindings...), findings...)}
 			score := report.ComputeScore(temp)
@@ -925,8 +966,12 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 	}
 	res.Summary = report.BuildSummary(allFindings)
 
-	// In CI mode, print compact summary
-	if ciMode && g.Format == output.FormatHuman {
+	// Print output based on format and mode
+	if g.Format == output.FormatJSON {
+		if err := console.PrintJSON(res); err != nil {
+			return err
+		}
+	} else if ciMode {
 		printCiSummary(console.Out, res)
 	} else {
 		if err := console.PrintResult(res); err != nil {
@@ -1031,6 +1076,161 @@ func detectDocs(root string) ([]report.Finding, error) {
 		msgs = append(msgs, report.Finding{ID: "docs.env.missing", Category: "documentation", Severity: report.SeverityWarning, Message: ".env.example absent"})
 	}
 	return msgs, nil
+}
+
+// compareFeatureVersions compares installed feature versions with registry versions.
+func compareFeatureVersions(root string, registry *feature.Registry, installed feature.FeaturesFile) []report.Finding {
+	var findings []report.Finding
+
+	if len(installed.Features) == 0 {
+		findings = append(findings, report.Finding{
+			ID:       "features.none",
+			Category: "features",
+			Severity: report.SeverityInfo,
+			Message:  "Aucune feature installée",
+		})
+		return findings
+	}
+
+	for _, installedFeat := range installed.Features {
+		// Check if feature exists in registry
+		regFeat, ok := registry.Get(installedFeat.Name)
+		if !ok {
+			findings = append(findings, report.Finding{
+				ID:         "features.unknown",
+				Category:   "features",
+				Severity:   report.SeverityWarning,
+				Message:    fmt.Sprintf("Feature %q installée mais inconnue du registre", installedFeat.Name),
+				Suggestion: "La feature a peut-être été supprimée du registre ou renommée",
+			})
+			continue
+		}
+
+		// Compare versions
+		registryVersion := regFeat.Version()
+		installedVersion := installedFeat.Version
+
+		if registryVersion != installedVersion {
+			findings = append(findings, report.Finding{
+				ID:         "features.version_mismatch",
+				Category:   "features",
+				Severity:   report.SeverityWarning,
+				Message:    fmt.Sprintf("Feature %q: version installée %s, version registre %s", installedFeat.Name, installedVersion, registryVersion),
+				Suggestion: "Considérez une mise à jour ou réinstallation de la feature",
+			})
+		} else {
+			findings = append(findings, report.Finding{
+				ID:       "features.version_ok",
+				Category: "pass",
+				Severity: report.SeverityInfo,
+				Message:  fmt.Sprintf("Feature %q: version %s (à jour)", installedFeat.Name, installedVersion),
+			})
+		}
+
+		// Check if feature directory exists
+		featurePath := filepath.Join(root, "internal", installedFeat.Name)
+		if _, err := os.Stat(featurePath); err != nil {
+			if os.IsNotExist(err) {
+				findings = append(findings, report.Finding{
+					ID:         "features.missing_dir",
+					Category:   "features",
+					Severity:   report.SeverityWarning,
+					File:       featurePath,
+					Message:    fmt.Sprintf("Feature %q déclarée mais répertoire manquant", installedFeat.Name),
+					Suggestion: "Réinstallez la feature avec 'forge add' ou supprimez-la de .forge/features.yaml",
+				})
+			}
+		} else {
+			findings = append(findings, report.Finding{
+				ID:       "features.dir.present",
+				Category: "pass",
+				Severity: report.SeverityInfo,
+				Message:  fmt.Sprintf("Feature %q: répertoire présent", installedFeat.Name),
+			})
+		}
+	}
+
+	return findings
+}
+
+// checkDoctorExitCode determines the exit code for doctor in CI mode.
+func checkDoctorExitCode(g *globalFlags, root string, extraFindings []report.Finding, reg *rules.Registry) error {
+	console := g.console()
+
+	// Run the same rules as runReport to get all findings
+	findings, err := reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+	if err != nil {
+		return &CiError{Code: 2, Err: err}
+	}
+
+	// Combine with extra findings
+	allFindings := append(extraFindings, findings...)
+	allFindings = report.UniqueFindings(allFindings)
+
+	res := report.Result{
+		SchemaVersion: report.JSONSchemaVersion,
+		Tool:          app.Name,
+		Version:       app.Version,
+		Command:       "doctor",
+		Project:       root,
+		Timestamp:     time.Now(),
+		Findings:      allFindings,
+	}
+	res.Summary = report.BuildSummary(allFindings)
+
+	// Print output based on format
+	if g.Format == output.FormatJSON {
+		if err := console.PrintJSON(res); err != nil {
+			return err
+		}
+	} else {
+		printDoctorCiSummary(console.Out, res)
+	}
+
+	// Determine exit code
+	hasErrors := res.Summary.Error > 0 || res.Summary.Critical > 0
+	hasWarnings := res.Summary.Warning > 0
+
+	if hasErrors {
+		return &CiError{Code: 1, Err: fmt.Errorf("diagnostics en échec : %d error(s), %d warning(s)", res.Summary.Error+res.Summary.Critical, res.Summary.Warning)}
+	}
+	if hasWarnings {
+		return &CiError{Code: 1, Err: fmt.Errorf("warnings détectés : %d warning(s)", res.Summary.Warning)}
+	}
+	return &CiError{Code: 0, Err: nil}
+}
+
+// printDoctorCiSummary prints a compact summary for doctor CI mode.
+func printDoctorCiSummary(out io.Writer, res report.Result) {
+	fmt.Fprintf(out, "ForgeKit Doctor — %s\n", res.Project)
+	fmt.Fprintf(out, "Version: %s | Timestamp: %s\n", res.Version, res.Timestamp.Format(time.RFC3339))
+	fmt.Fprintf(out, "Summary: pass=%d info=%d warning=%d error=%d critical=%d\n",
+		res.Summary.Pass, res.Summary.Info, res.Summary.Warning, res.Summary.Error, res.Summary.Critical)
+
+	// Print category scores using the score computation
+	score := report.ComputeScore(res)
+	categories := []string{"environment", "project", "security", "docker", "configuration", "dependencies", "features", "documentation"}
+	for _, cat := range categories {
+		s := score.Categories[cat]
+		if s > 0 { // Only show categories that have findings
+			status := "PASS"
+			if s < 60 {
+				status = "FAIL"
+			}
+			fmt.Fprintf(out, "  [%s] %s: %d/100\n", status, cat, s)
+		}
+	}
+
+	// Print warnings and errors
+	for _, f := range res.Findings {
+		if f.Severity == report.SeverityWarning || f.Severity == report.SeverityError || f.Severity == report.SeverityCritical {
+			loc := ""
+			if f.File != "" {
+				loc = fmt.Sprintf(" (%s)", f.File)
+			}
+			fmt.Fprintf(out, "  %s: %s%s\n", strings.ToUpper(string(f.Severity)), f.Message, loc)
+		}
+	}
 }
 
 func newCheckCommand(g *globalFlags) *cobra.Command {
@@ -1260,7 +1460,7 @@ func runFeatureList(g *globalFlags, registry *feature.Registry) error {
 		}
 
 		type featureListWithSchema struct {
-			SchemaVersion string       `json:"schema_version"`
+			SchemaVersion string        `json:"schema_version"`
 			Features      []featureJSON `json:"features"`
 		}
 
@@ -1339,12 +1539,12 @@ func runFeatureAdd(
 
 	detector := feature.Detector{}
 
-	project, err := detector.Detect(root)
+	project, err := detector.DetectLoose(root) // Support external compatible projects
 	if spinner != nil {
 		if err != nil {
 			spinner.Stop("✗ Détection du projet — erreur")
 		} else {
-			spinner.Stop("✓ Projet ForgeKit détecté")
+			spinner.Stop("✓ Projet détecté")
 		}
 	}
 	if err != nil {
@@ -1409,10 +1609,14 @@ func runFeatureAdd(
 				}
 			}
 			if alreadyInstalled {
+				// Skip already installed dependencies - they're already satisfied
 				if dryRun || showPlan {
 					continue // In dry-run/plan mode, just show message and continue
 				}
-				return fmt.Errorf("feature %q déjà installée", feat.Name())
+				if g.Format == output.FormatHuman && !g.Quiet {
+					fmt.Fprintf(console.Out, "  ✓ %s déjà installé, ignoré\n", feat.Name())
+				}
+				continue
 			}
 			return fmt.Errorf("vérification de la feature %q : %w", feat.Name(), checkErr)
 		}
@@ -1566,12 +1770,12 @@ func runFeatureRemove(
 
 	detector := feature.Detector{}
 
-	project, err := detector.Detect(root)
+	project, err := detector.DetectLoose(root) // Support external compatible projects
 	if spinner != nil {
 		if err != nil {
 			spinner.Stop("✗ Détection du projet — erreur")
 		} else {
-			spinner.Stop("✓ Projet ForgeKit détecté")
+			spinner.Stop("✓ Projet détecté")
 		}
 	}
 	if err != nil {
@@ -1717,7 +1921,7 @@ func printFeatureRemovePlan(g *globalFlags, plan feature.Plan) error {
 
 	if g.Format == output.FormatJSON {
 		type planWithSchema struct {
-			SchemaVersion string      `json:"schema_version"`
+			SchemaVersion string       `json:"schema_version"`
 			Plan          feature.Plan `json:"plan"`
 		}
 		return console.PrintJSON(planWithSchema{
@@ -1736,8 +1940,8 @@ func printFeatureRemovePlan(g *globalFlags, plan feature.Plan) error {
 	fmt.Fprintln(console.Out)
 	fmt.Fprintln(console.Out, "ForgeKit Remove Plan")
 	fmt.Fprintln(console.Out, "────────────────────────────────")
-	fmt.Fprintf(console.Out, "Feature : %s\n", plan.Feature)
-	fmt.Fprintf(console.Out, "Version : %s\n", plan.Version)
+	fmt.Fprintf(console.Out, "Feature: %s\n", plan.Feature)
+	fmt.Fprintf(console.Out, "Version: %s\n", plan.Version)
 
 	if len(plan.Files) > 0 {
 		fmt.Fprintln(console.Out)
@@ -1821,7 +2025,7 @@ func printFeaturePlan(g *globalFlags, plan feature.Plan, dryRun, showPlan bool) 
 
 	if g.Format == output.FormatJSON {
 		type planWithSchema struct {
-			SchemaVersion string      `json:"schema_version"`
+			SchemaVersion string       `json:"schema_version"`
 			Plan          feature.Plan `json:"plan"`
 		}
 		return console.PrintJSON(planWithSchema{
@@ -1854,8 +2058,8 @@ func printFeaturePlan(g *globalFlags, plan feature.Plan, dryRun, showPlan bool) 
 	fmt.Fprintln(console.Out)
 	fmt.Fprintln(console.Out, "ForgeKit Plan")
 	fmt.Fprintln(console.Out, "────────────────────────────────")
-	fmt.Fprintf(console.Out, "Feature : %s\n", plan.Feature)
-	fmt.Fprintf(console.Out, "Version : %s\n", plan.Version)
+	fmt.Fprintf(console.Out, "Feature: %s\n", plan.Feature)
+	fmt.Fprintf(console.Out, "Version: %s\n", plan.Version)
 
 	if len(plan.Files) > 0 {
 		fmt.Fprintln(console.Out)
@@ -1933,10 +2137,10 @@ func printFeaturePlan(g *globalFlags, plan feature.Plan, dryRun, showPlan bool) 
 
 // InstallSnapshot holds the state of the project before installation for rollback.
 type InstallSnapshot struct {
-	GoModContent  []byte
-	GoSumContent  []byte
-	ForgeDirPath  string
-	ForgeFiles    map[string][]byte
+	GoModContent []byte
+	GoSumContent []byte
+	ForgeDirPath string
+	ForgeFiles   map[string][]byte
 }
 
 // createInstallSnapshot captures the current state of key project files.
@@ -2061,32 +2265,32 @@ func newInspectCommand(g *globalFlags) *cobra.Command {
 
 			result := forge.ValidateSignature(root)
 
-if g.Format == output.FormatJSON {
-			type inspectJSON struct {
-				SchemaVersion string                     `json:"schema_version"`
-				Status        string                     `json:"status"`
-				Legacy        bool                       `json:"legacy"`
-				Metadata      forge.ForgeMetadata        `json:"metadata"`
-				Features      []feature.InstalledFeature `json:"features"`
-				Errors        []string                   `json:"errors"`
-				Warnings      []string                   `json:"warnings"`
+			if g.Format == output.FormatJSON {
+				type inspectJSON struct {
+					SchemaVersion string                     `json:"schema_version"`
+					Status        string                     `json:"status"`
+					Legacy        bool                       `json:"legacy"`
+					Metadata      forge.ForgeMetadata        `json:"metadata"`
+					Features      []feature.InstalledFeature `json:"features"`
+					Errors        []string                   `json:"errors"`
+					Warnings      []string                   `json:"warnings"`
+				}
+				status := "valid"
+				if result.IsAbsent() {
+					status = "absent"
+				} else if result.IsInvalid() {
+					status = "invalid"
+				}
+				return console.PrintJSON(inspectJSON{
+					SchemaVersion: report.JSONSchemaVersion,
+					Status:        status,
+					Legacy:        result.LegacyProject,
+					Metadata:      result.Metadata,
+					Features:      result.Features.Features,
+					Errors:        result.Errors,
+					Warnings:      result.Warnings,
+				})
 			}
-			status := "valid"
-			if result.IsAbsent() {
-				status = "absent"
-			} else if result.IsInvalid() {
-				status = "invalid"
-			}
-			return console.PrintJSON(inspectJSON{
-				SchemaVersion: report.JSONSchemaVersion,
-				Status:        status,
-				Legacy:        result.LegacyProject,
-				Metadata:      result.Metadata,
-				Features:      result.Features.Features,
-				Errors:        result.Errors,
-				Warnings:      result.Warnings,
-			})
-		}
 
 			if result.IsAbsent() {
 				fmt.Fprintln(console.Out, "ForgeKit")
