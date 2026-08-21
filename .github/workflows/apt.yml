@@ -86,9 +86,11 @@ jobs:
           apt-ftparchive release . >> Release
 
       - name: Sign Release file (InRelease)
+        env:
+          GPG_PASSPHRASE: ${{ secrets.FORGEKIT_APT_GPG_PASSPHRASE }}
         run: |
           cd apt/dists/stable
-          gpg --clearsign -o InRelease Release
+          gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --clearsign -o InRelease Release
 
       - name: Copy public key to repo root
         run: |
