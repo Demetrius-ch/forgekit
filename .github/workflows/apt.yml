@@ -70,6 +70,7 @@ jobs:
       - name: Generate Release file
         run: |
           cd apt/dists/stable
+          DATE=$(date -Ru)
           cat > Release <<EOF
 Origin: ForgeKit
 Label: ForgeKit
@@ -78,7 +79,7 @@ Codename: stable
 Architectures: amd64
 Components: main
 Description: ForgeKit APT Repository
-Date: $(date -Ru)
+Date: $DATE
 EOF
           # Add hashes
           apt-ftparchive release . >> Release
