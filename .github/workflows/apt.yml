@@ -106,9 +106,9 @@ jobs:
           rm -f InRelease
           gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --clearsign -o InRelease Release
 
-      - name: Copy public key to repo root
+      - name: Copy public key to apt root for deployment
         run: |
-          cp apt/gpg/forgekit-archive-keyring.gpg ./forgekit-archive-keyring.gpg
+          cp apt/gpg/forgekit-archive-keyring.gpg apt/forgekit-archive-keyring.gpg
 
       - name: Validate APT repository
         run: |
