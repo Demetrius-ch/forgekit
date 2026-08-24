@@ -29,8 +29,20 @@ go test ./internal/ports/...
 go test -tags=e2e ./internal/e2e/...
 
 # Integration test (runs in CI)
-./forge init ci-api --non-interactive --module github.com/forgekit/ci-api
+./forge init ci-api --non-interactive --module github.com/Demetrius-ch/ci-api
 cd ci-api && go test ./...
+```
+
+## Makefile Targets
+```bash
+make build          # Build forge binary (development)
+make test           # Run all tests
+make vet            # Run go vet
+make lint           # Run gofmt -w .
+make build-linux    # Build static Linux binary (CGO_ENABLED=0)
+make package        # Build release artifacts with GoReleaser (snapshot)
+make clean          # Remove build artifacts
+make ci             # Full CI pipeline (lint -> vet -> test -> build)
 ```
 
 ## Key Architecture
@@ -65,7 +77,8 @@ Note: `internal/doctor`, `internal/analyze`, `internal/arch`, `internal/project`
 ## Dependencies
 - `github.com/spf13/cobra` — CLI framework
 - `gopkg.in/yaml.v3` — YAML config parsing
-- Go 1.25 (per go.mod), CI uses 1.22 (see `.github/workflows/ci.yml`)
+- `github.com/jackc/pgx/v5` — PostgreSQL driver (generated projects)
+- Go 1.26 (per go.mod), CI uses 1.22 (see `.github/workflows/ci.yml`)
 
 ## Generated Project Stack (Fixed in V0.1)
 - Go stdlib `net/http` with **Chi router** (`github.com/go-chi/chi/v5`)
@@ -73,6 +86,14 @@ Note: `internal/doctor`, `internal/analyze`, `internal/arch`, `internal/project`
 - Docker Compose for local dev
 - Environment config via `.env` (caarlos0/env pattern)
 - Table-driven tests + testcontainers-go optional
+
+## Feature Dependency Graph
+```
+auth (no deps)
+  └── cors (depends on auth)
+  └── logging (depends on auth)
+      └── swagger (depends on cors)
+```
 
 ## Common Tasks
 
@@ -125,8 +146,17 @@ These internal packages currently have no test files:
 - User config at `~/.forgekit/config.yaml`
 - Project config at `forge.yaml` in generated projects
 
+## Release Process
+- Uses GoReleaser (`.goreleaser.yaml`)
+- Builds for linux/amd64 and linux/arm64
+- Creates .tar.gz archives, .deb packages, and SHA256 checksums
+- Version injected via ldflags: `github.com/Demetrius-ch/forgekit/internal/app.Version`
+- Release triggered by git tags
+
 ## Useful References
 - `README.md` — User-facing docs, usage examples
 - `projects.md` — Product vision and roadmap
 - `explication.md` — Competitive analysis and positioning
 - `.github/workflows/ci.yml` — Authoritative CI commands
+- `Makefile` — Development commands
+- `.goreleaser.yaml` — Release configuration
