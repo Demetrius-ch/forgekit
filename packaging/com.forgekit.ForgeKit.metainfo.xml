@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="console-application">
+  <id>com.forgekit.ForgeKit</id>
+  <name>ForgeKit</name>
+  <summary>Go CLI for creating, managing, analyzing and diagnosing REST APIs</summary>
+  <description>
+    <p>ForgeKit is a developer CLI written in Go that helps you bootstrap backend REST APIs without manually creating the same project structure, configuration, database integration, Docker files, migrations, and tests every time.</p>
+    <p>It generates production-ready Go REST APIs with a clean hexagonal architecture, including PostgreSQL integration, Docker Compose, database migrations, environment configuration, and automatic tests.</p>
+  </description>
+  <developer>
+    <name>ForgeKit Contributors</name>
+    <url>https://github.com/Demetrius-ch/forgekit</url>
+  </developer>
+  <project_license>MIT</project_license>
+  <metadata_license>CC0-1.0</metadata_license>
+  <url type="homepage">https://github.com/Demetrius-ch/forgekit</url>
+  <url type="bugtracker">https://github.com/Demetrius-ch/forgekit/issues</url>
+  <url type="help">https://github.com/Demetrius-ch/forgekit#usage</url>
+  <repository>https://github.com/Demetrius-ch/forgekit.git</repository>
+  <icon type="stock">com.forgekit.ForgeKit</icon>
+  <categories>
+    <category>Development</category>
+    <category>System</category>
+  </categories>
+  <keywords>
+    <keyword>backend</keyword>
+    <keyword>api</keyword>
+    <keyword>rest</keyword>
+    <keyword>go</keyword>
+    <keyword>generator</keyword>
+    <keyword>cli</keyword>
+  </keywords>
+  <provides>
+    <binary>forge</binary>
+  </provides>
+  <releases>
+    <release version="0.3.0" date="2026-08-21">
+      <description>
+        <p>Initial release with APT repository support</p>
+      </description>
+    </release>
+  </releases>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://github.com/Demetrius-ch/forgekit/raw/main/assets/logo/forgekit-logo.png</image>
+      <caption>ForgeKit CLI in action</caption>
+    </screenshot>
+  </screenshots>
+</component>

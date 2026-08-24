@@ -63,6 +63,13 @@ nfpms:
     priority: optional
     epoch: "0"
     file_name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}_{{.Arch}}"
+    contents:
+      - src: packaging/icons/hicolor/scalable/apps/forgekit.svg
+        dst: /usr/share/icons/hicolor/scalable/apps/forgekit.svg
+        type: file
+      - src: packaging/com.forgekit.ForgeKit.metainfo.xml
+        dst: /usr/share/metainfo/com.forgekit.ForgeKit.metainfo.xml
+        type: file
 
 # Release configuration
 release:
