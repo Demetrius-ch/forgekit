@@ -64,11 +64,11 @@ Install ForgeKit from the official APT repository:
 
 ```bash
 # 1. Add the ForgeKit GPG key
-curl -fsSL https://demetrius-ch.github.io/forgekit/gpg/forgekit-archive-keyring.gpg \
-  | sudo gpg --dearmor -o /usr/share/keyrings/forgekit.gpg
+curl -fsSL https://demetrius-ch.github.io/forgekit/forgekit-archive-keyring.gpg \
+  | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/forgekit.gpg
 
 # 2. Add the APT repository
-echo "deb [signed-by=/usr/share/keyrings/forgekit.gpg] https://demetrius-ch.github.io/forgekit stable main" \
+echo "deb https://demetrius-ch.github.io/forgekit stable main" \
   | sudo tee /etc/apt/sources.list.d/forgekit.list
 
 # 3. Update and install
@@ -84,7 +84,7 @@ Uninstall:
 ```bash
 sudo apt remove forge
 # Optionally remove the repository and key
-sudo rm /etc/apt/sources.list.d/forgekit.list /usr/share/keyrings/forgekit.gpg
+sudo rm /etc/apt/sources.list.d/forgekit.list /etc/apt/trusted.gpg.d/forgekit.gpg
 sudo apt update
 ```
 

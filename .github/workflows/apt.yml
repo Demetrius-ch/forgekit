@@ -135,3 +135,8 @@ jobs:
           echo "APT repository deployed to ${{ steps.deployment.outputs.page_url }}"
           echo "Repository URL: https://demetrius-ch.github.io/forgekit/"
           echo "Key URL: https://demetrius-ch.github.io/forgekit/forgekit-archive-keyring.gpg"
+          echo ""
+          echo "Install with:"
+          echo "  curl -fsSL https://demetrius-ch.github.io/forgekit/forgekit-archive-keyring.gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/forgekit.gpg"
+          echo "  echo \"deb https://demetrius-ch.github.io/forgekit stable main\" | sudo tee /etc/apt/sources.list.d/forgekit.list"
+          echo "  sudo apt update && sudo apt install forge"
