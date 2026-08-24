@@ -1,0 +1,14 @@
+#!/usr/bin/make -f
+%:
+	dh $@ --buildsystem=golang --with=golang
+
+override_dh_auto_build:
+	dh_auto_build -- -trimpath -ldflags="-s -w -X github.com/Demetrius-ch/forgekit/internal/app.Version=$(DEB_VERSION_UPSTREAM)"
+
+override_dh_auto_install:
+	dh_auto_install -- --prefix=/usr
+
+override_dh_install:
+	dh_install
+	# Man page
+	install -Dm644 debian/forge.1 debian/forge/usr/share/man/man1/forge.1

@@ -1,0 +1,64 @@
+.TH FORGE 1 "Août 2026" "ForgeKit 0.3.1" "Commandes utilisateur"
+.SH NOM
+forge \- Générateur de backends REST Go avec architecture hexagonale
+.SH SYNOPSIS
+.B forge
+[\fIcommand\fR] [\fIoptions\fR]
+.SH DESCRIPTION
+ForgeKit est un outil CLI qui génère des APIs REST Go prêtes pour la production
+avec une architecture hexagonale propre, incluant PostgreSQL, Docker, migrations
+et tests automatiques.
+.SH COMMANDES
+.TP
+.B init
+Initialise un nouveau projet backend Go
+.TP
+.B add
+Ajoute une fonctionnalité (auth, cors, logging, swagger)
+.TP
+.B remove
+Supprime une fonctionnalité
+.TP
+.B doctor
+Diagnostique l'environnement et le projet
+.TP
+.B check
+Vérifie la conformité architecturale
+.TP
+.B analyze
+Analyse la structure et les pratiques du projet
+.TP
+.B inspect
+Inspecte la signature ForgeKit du projet
+.TP
+.B config
+Gère la configuration ForgeKit
+.TP
+.B version
+Affiche la version
+.SH OPTIONS
+.TP
+.BR \-h, \-\-help
+Affiche l'aide
+.TP
+.BR \-\-format
+Format de sortie: human, json
+.TP
+.BR \-\-debug
+Affiche les détails internes en cas d'erreur
+.TP
+.BR \-\-quiet
+Réduit la sortie (sauf erreurs et JSON)
+.SH FICHIERS
+.TP
+.B ~/.forgekit/config.yaml
+Configuration utilisateur
+.TP
+.B forge.yaml
+Configuration du projet
+.SH VOIR AUSSI
+.BR forge-init (1),
+.BR forge-add (1),
+.BR forge-doctor (1)
+.SH AUTEUR
+ForgeKit Contributors <forgekit@demetrius-ch.github.io>
