@@ -1,0 +1,3 @@
+version=4
+https://github.com/Demetrius-ch/forgekit/tags
+    /Demetrius-ch/forgekit/archive/refs/tags/v([\d.]+)\.tar\.gz

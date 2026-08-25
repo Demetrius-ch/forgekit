@@ -23,7 +23,7 @@ ForgeKit is a developer CLI written in Go that helps you bootstrap backend REST 
 The goal is simple:
 
 ```text
-forge init my-api
+forgekit init my-api
 ```
 
 and get a structured Go backend ready for development.
@@ -45,13 +45,13 @@ and get a structured Go backend ready for development.
 - Project analysis with scoring
 - Human-readable or JSON output
 - Extensible CLI architecture
-- **Feature system (`forge add` / `forge remove`) for extending generated projects**
-- **JWT authentication infrastructure (`forge add auth`)**
-- **CORS middleware (`forge add cors`)**
-- **Structured logging (`forge add logging`)**
-- **Swagger/OpenAPI documentation (`forge add swagger`)**
+- **Feature system (`forgekit add` / `forgekit remove`) for extending generated projects**
+- **JWT authentication infrastructure (`forgekit add auth`)**
+- **CORS middleware (`forgekit add cors`)**
+- **Structured logging (`forgekit add logging`)**
+- **Swagger/OpenAPI documentation (`forgekit add swagger`)**
 - **CI/CD integration with `--ci` mode**
-- **Project diagnostics with `forge doctor`**
+- **Project diagnostics with `forgekit doctor`**
 - **Feature version tracking and rollback**
 
 ---
@@ -63,28 +63,30 @@ and get a structured Go backend ready for development.
 Install ForgeKit from the official APT repository:
 
 ```bash
-# 1. Add the ForgeKit GPG key
+# 1. Add the ForgeKit GPG key (Deb822 format)
 curl -fsSL https://demetrius-ch.github.io/forgekit/forgekit-archive-keyring.gpg \
-  | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/forgekit.gpg
+  | sudo gpg --dearmor -o /usr/share/keyrings/forgekit-archive-keyring.gpg
 
 # 2. Add the APT repository
-echo "deb https://demetrius-ch.github.io/forgekit stable main" \
-  | sudo tee /etc/apt/sources.list.d/forgekit.list
+echo "deb [signed-by=/usr/share/keyrings/forgekit-archive-keyring.gpg] https://demetrius-ch.github.io/forgekit stable main" \
+  | sudo tee /etc/apt/sources.list.d/forgekit.sources
 
 # 3. Update and install
 sudo apt update
-sudo apt install forge
+sudo apt install forgekit
 
 # 4. Verify installation
-forge version
+forgekit version
 ```
+
+**Note:** The package also provides `forge` as a backward-compatibility alias. Both `forgekit` and `forge` commands work identically.
 
 Uninstall:
 
 ```bash
-sudo apt remove forge
+sudo apt remove forgekit
 # Optionally remove the repository and key
-sudo rm /etc/apt/sources.list.d/forgekit.list /etc/apt/trusted.gpg.d/forgekit.gpg
+sudo rm /etc/apt/sources.list.d/forgekit.sources /usr/share/keyrings/forgekit-archive-keyring.gpg
 sudo apt update
 ```
 
@@ -95,15 +97,15 @@ Download the latest `.deb` package from [GitHub Releases](https://github.com/Dem
 ```bash
 # Replace VERSION with the desired version (e.g., 0.3.0)
 VERSION=0.3.0
-wget https://github.com/Demetrius-ch/forgekit/releases/download/v${VERSION}/forge_${VERSION}_linux_amd64.deb
-sudo dpkg -i forge_${VERSION}_linux_amd64.deb
-forge version
+wget https://github.com/Demetrius-ch/forgekit/releases/download/v${VERSION}/forgekit_${VERSION}_linux_amd64.deb
+sudo dpkg -i forgekit_${VERSION}_linux_amd64.deb
+forgekit version
 ```
 
 Uninstall:
 
 ```bash
-sudo apt remove forge
+sudo apt remove forgekit
 ```
 
 ### From source
@@ -124,7 +126,7 @@ cd forgekit
 Build ForgeKit:
 
 ```bash
-go build -o forge ./cmd/forge
+go build -o forgekit ./cmd/forge
 ```
 
 Install it globally:
@@ -136,7 +138,7 @@ go install ./cmd/forge
 Verify the installation:
 
 ```bash
-forge version
+forgekit version
 ```
 
 ### Binary (Linux)
@@ -146,10 +148,10 @@ Download the static binary from [GitHub Releases](https://github.com/Demetrius-c
 ```bash
 # Replace VERSION with the desired version (e.g., 0.3.0)
 VERSION=0.3.0
-wget https://github.com/Demetrius-ch/forgekit/releases/download/v${VERSION}/forge_${VERSION}_linux_amd64.tar.gz
-tar -xzf forge_${VERSION}_linux_amd64.tar.gz
-sudo mv forge /usr/local/bin/
-forge version
+wget https://github.com/Demetrius-ch/forgekit/releases/download/v${VERSION}/forgekit_${VERSION}_linux_amd64.tar.gz
+tar -xzf forgekit_${VERSION}_linux_amd64.tar.gz
+sudo mv forgekit /usr/local/bin/
+forgekit version
 ```
 
 Verify checksums (SHA256):
@@ -163,10 +165,12 @@ sha256sum -c checksums.txt
 
 ## Usage
 
+The primary command is `forgekit`. The `forge` alias is also available for backward compatibility.
+
 ### Initialize a project
 
 ```bash
-forge init my-api
+forgekit init my-api
 ```
 
 ForgeKit interactively asks for the project configuration and generates the backend.
@@ -174,7 +178,7 @@ ForgeKit interactively asks for the project configuration and generates the back
 You can also use non-interactive mode:
 
 ```bash
-forge init my-api \
+forgekit init my-api \
   --module github.com/example/my-api \
   --port 8080 \
   --db-name my_api \
@@ -184,13 +188,13 @@ forge init my-api \
 Specify a target directory:
 
 ```bash
-forge init my-api --dir /tmp/my-api
+forgekit init my-api --dir /tmp/my-api
 ```
 
 Preview the files without creating them:
 
 ```bash
-forge init my-api --dry-run
+forgekit init my-api --dry-run
 ```
 
 ---
@@ -241,7 +245,7 @@ my-api/
 └── go.sum
 ```
 
-After installing features (e.g., `forge add auth`), the structure extends with:
+After installing features (e.g., `forgekit add auth`), the structure extends with:
 
 ```text
 my-api/
@@ -338,14 +342,14 @@ Expected response:
 
 ---
 
-## Extend a generated project with `forge add`
+## Extend a generated project with `forgekit add`
 
 ForgeKit introduces an extensible feature system to add capabilities to existing projects.
 
 ### List available features
 
 ```bash
-forge add --list
+forgekit add --list
 ```
 
 Output:
@@ -364,7 +368,7 @@ Each feature shows its name, version, description, and dependencies (if any).
 ### Preview a feature installation (plan mode)
 
 ```bash
-forge add auth --plan
+forgekit add auth --plan
 ```
 
 Output:
@@ -394,7 +398,7 @@ The `--plan` (or `--dry-run`) flag shows what would be created/modified/deleted 
 ### Install a feature
 
 ```bash
-forge add auth
+forgekit add auth
 ```
 
 Output:
@@ -427,13 +431,13 @@ The `auth` feature adds:
 
 ### Idempotency
 
-Running `forge add auth` twice is safe:
+Running `forgekit add auth` twice is safe:
 
 ```bash
-$ forge add auth
+$ forgekit add auth
 ✓ Feature "auth" installée avec succès
 
-$ forge add auth
+$ forgekit add auth
 ⚠ Feature "auth" déjà installée
 ```
 
@@ -442,8 +446,8 @@ $ forge add auth
 All commands support `--format json` for machine-readable output:
 
 ```bash
-forge add --list --format json
-forge add auth --dry-run --format json
+forgekit add --list --format json
+forgekit add auth --dry-run --format json
 ```
 
 ### Quiet mode
@@ -451,13 +455,13 @@ forge add auth --dry-run --format json
 Suppress non-essential output:
 
 ```bash
-forge add auth --quiet
+forgekit add auth --quiet
 ```
 
 ### Remove a feature
 
 ```bash
-forge remove auth
+forgekit remove auth
 ```
 
 Before removal, ForgeKit checks:
@@ -487,7 +491,7 @@ Suppression...
 Preview removal with `--plan`:
 
 ```bash
-forge remove auth --plan
+forgekit remove auth --plan
 ```
 
 ### JSON output
@@ -495,11 +499,11 @@ forge remove auth --plan
 All commands support `--format json` for machine-readable output:
 
 ```bash
-forge add --list --format json
-forge add auth --plan --format json
-forge remove auth --format json
-forge doctor --format json
-forge analyze --format json
+forgekit add --list --format json
+forgekit add auth --plan --format json
+forgekit remove auth --format json
+forgekit doctor --format json
+forgekit analyze --format json
 ```
 
 Example JSON output:
@@ -507,7 +511,7 @@ Example JSON output:
 ```json
 {
   "schema_version": "1",
-  "tool": "forge",
+  "tool": "forgekit",
   "version": "0.3.0",
   "command": "add",
   "features": [
@@ -522,7 +526,7 @@ Example JSON output:
 Suppress non-essential output:
 
 ```bash
-forge add auth --quiet
+forgekit add auth --quiet
 ```
 
 ---
@@ -536,7 +540,7 @@ ForgeKit provides several commands to help developers verify their project.
 Check the development environment and project health:
 
 ```bash
-forge doctor
+forgekit doctor
 ```
 
 Output includes:
@@ -551,7 +555,7 @@ Output includes:
 **CI mode** (non-interactive, deterministic, exit codes):
 
 ```bash
-forge doctor --ci
+forgekit doctor --ci
 ```
 
 Exit codes: `0` = success, `1` = warnings/errors, `2` = execution error
@@ -559,7 +563,7 @@ Exit codes: `0` = success, `1` = warnings/errors, `2` = execution error
 **JSON output**:
 
 ```bash
-forge doctor --format json
+forgekit doctor --format json
 ```
 
 ### Check
@@ -567,7 +571,7 @@ forge doctor --format json
 Validate architectural conventions:
 
 ```bash
-forge check
+forgekit check
 ```
 
 ### Analyze
@@ -581,7 +585,7 @@ Analyze the project structure and practices across categories:
 - Documentation
 
 ```bash
-forge analyze
+forgekit analyze
 ```
 
 Output shows category scores (0-100), global score, and recommendations.
@@ -589,7 +593,7 @@ Output shows category scores (0-100), global score, and recommendations.
 **CI mode** (non-interactive, deterministic, exit codes):
 
 ```bash
-forge analyze --ci
+forgekit analyze --ci
 ```
 
 Exit codes: `0` = success, `1` = issues detected, `2` = execution error
@@ -597,7 +601,7 @@ Exit codes: `0` = success, `1` = issues detected, `2` = execution error
 **JSON output**:
 
 ```bash
-forge analyze --format json
+forgekit analyze --format json
 ```
 
 ### Run tests
@@ -621,7 +625,7 @@ go vet ./...
 Display the available commands:
 
 ```bash
-forge --help
+forgekit --help
 ```
 
 Available commands include:
@@ -650,18 +654,18 @@ Global options:
 **CI modes** (non-interactive, deterministic, exit codes 0/1/2):
 
 ```bash
-forge doctor --ci
-forge analyze --ci
+forgekit doctor --ci
+forgekit analyze --ci
 ```
 
 JSON output can be requested with:
 
 ```bash
-forge --format json doctor
-forge --format json analyze
-forge add --list --format json
-forge add auth --plan --format json
-forge remove auth --format json
+forgekit --format json doctor
+forgekit --format json analyze
+forgekit add --list --format json
+forgekit add auth --plan --format json
+forgekit remove auth --format json
 ```
 
 ---
@@ -818,13 +822,13 @@ Run tests
 ForgeKit turns this repetitive process into:
 
 ```bash
-forge init my-api
+forgekit init my-api
 ```
 
 And extends it with features:
 
 ```bash
-forge add auth
+forgekit add auth
 ```
 
 The developer can then focus on the actual business logic.

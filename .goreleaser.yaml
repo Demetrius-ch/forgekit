@@ -6,9 +6,9 @@ version: 2
 
 # Build configuration
 builds:
-  - id: forge
+  - id: forgekit
     main: ./cmd/forge
-    binary: forge
+    binary: forgekit
     goos:
       - linux
     goarch:
@@ -24,9 +24,9 @@ builds:
 
 # Archive configuration
 archives:
-  - id: forge
+  - id: forgekit
     ids:
-      - forge
+      - forgekit
     formats:
       - tar.gz
     name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}_{{.Arch}}"
@@ -38,17 +38,21 @@ checksum:
 
 # Debian package via nfpm
 nfpms:
-  - id: forge-deb
+  - id: forgekit-deb
     ids:
-      - forge
-    package_name: forge
+      - forgekit
+    package_name: forgekit
     vendor: ForgeKit
     homepage: https://github.com/Demetrius-ch/forgekit
     maintainer: ForgeKit Maintainers <forgekit@demetrius-ch.github.io>
     description: |
-      ForgeKit — Go Backend Generator
+      Go CLI for generating, managing, analyzing and diagnosing
+      backend APIs.
+      .
       Build production-ready REST APIs with hexagonal architecture.
       Scaffolds projects with PostgreSQL, Docker, migrations, tests.
+      Provides: forge add, forge remove, forge doctor, forge analyze,
+      forge check, forge inspect.
     license: MIT
     formats:
       - deb
@@ -62,14 +66,37 @@ nfpms:
     section: devel
     priority: optional
     epoch: "0"
-    file_name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}_{{.Arch}}"
+    replaces:
+      - forge
+    provides:
+      - forge
+    file_name_template: "forgekit_{{.Version}}_{{.Os}}_{{.Arch}}"
     contents:
       - src: packaging/icons/hicolor/scalable/apps/forgekit.svg
         dst: /usr/share/icons/hicolor/scalable/apps/forgekit.svg
         type: file
+        file_info:
+          mode: 0644
       - src: packaging/com.forgekit.ForgeKit.metainfo.xml
         dst: /usr/share/metainfo/com.forgekit.ForgeKit.metainfo.xml
         type: file
+        file_info:
+          mode: 0644
+      - src: forgekit
+        dst: /usr/bin/forge
+        type: symlink
+        file_info:
+          mode: 0755
+      - src: debian/changelog.Debian.gz
+        dst: /usr/share/doc/forgekit/changelog.Debian.gz
+        type: file
+        file_info:
+          mode: 0644
+      - src: debian/copyright
+        dst: /usr/share/doc/forgekit/copyright
+        type: file
+        file_info:
+          mode: 0644
 
 # Release configuration
 release:

@@ -1,5 +1,10 @@
 forgekit (0.3.1-1) unstable; urgency=medium
 
-  * Initial release (Closes: #XXXXXX)
+  * Initial release of ForgeKit as Debian package
+  * Go CLI for generating, managing, analyzing and diagnosing backend APIs
+  * Hexagonal architecture with PostgreSQL, Docker, migrations
+  * Feature system: auth, cors, logging, swagger
+  * Architecture validation: doctor, check, analyze, inspect
+  * Provides backward-compatible 'forge' symlink
 
- -- ForgeKit Maintainers <forgekit@demetrius-ch.github.io>  Mon, 24 Aug 2026 00:00:00 +0000
+ -- ForgeKit Maintainers <forgekit@demetrius-ch.github.io>  Tue, 25 Aug 2026 12:00:00 +0200

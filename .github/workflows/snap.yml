@@ -1,0 +1,87 @@
+# .github/workflows/snap.yml - ForgeKit Snap Publishing Workflow
+# Triggers on release publication, builds Snap, and publishes to Snap Store
+
+name: Snap Store
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v0.3.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-snap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine release tag
+        id: get_tag
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${{ github.event.inputs.tag }}"
+          fi
+          if [[ -z "$TAG" ]]; then
+            echo "Error: Could not determine release tag" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Build binary
+        run: |
+          CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/Demetrius-ch/forgekit/internal/app.Version=${{ steps.get_tag.outputs.tag }}" -o forgekit ./cmd/forge
+
+      - name: Install Snapcraft
+        uses: snapcraft/action-build@v1
+
+      - name: Build Snap
+        working-directory: ./snap
+        run: |
+          snapcraft --use-lxd
+
+      - name: Verify Snap
+        run: |
+          ls -lh *.snap
+          unsquashfs -l *.snap | head -20
+
+      - name: Publish to Snap Store
+        if: github.event_name == 'release' && github.event.release.prerelease == false
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          snapcraft upload --release=stable *.snap
+        working-directory: ./snap
+
+      - name: Upload Snap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forgekit-snap
+          path: '*.snap'
+          retention-days: 30

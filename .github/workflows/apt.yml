@@ -67,18 +67,18 @@ jobs:
 
       - name: Build APT repository structure
         run: |
-          mkdir -p apt/pool/main/f/forge
+          mkdir -p apt/pool/main/f/forgekit
           mkdir -p apt/dists/stable/main/binary-amd64
           mkdir -p apt/gpg
 
       - name: Copy .deb to pool
         run: |
-          cp artifacts/forgekit_*_linux_amd64.deb apt/pool/main/f/forge/forge_${{ steps.get_tag.outputs.tag }}_amd64.deb
+          cp artifacts/forgekit_*_linux_amd64.deb apt/pool/main/f/forgekit/forgekit_${{ steps.get_tag.outputs.tag }}_amd64.deb
 
       - name: Generate Packages
         run: |
           cd apt
-          dpkg-scanpackages pool/main/f/forge /dev/null > dists/stable/main/binary-amd64/Packages
+          dpkg-scanpackages pool/main/f/forgekit /dev/null > dists/stable/main/binary-amd64/Packages
           gzip -c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
 
       - name: Generate Release file
@@ -116,7 +116,7 @@ jobs:
           test -f apt/dists/stable/InRelease
           test -f apt/dists/stable/main/binary-amd64/Packages
           test -f apt/dists/stable/main/binary-amd64/Packages.gz
-          grep -q "forge_" apt/dists/stable/main/binary-amd64/Packages
+          grep -q "forgekit_" apt/dists/stable/main/binary-amd64/Packages
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -137,6 +137,6 @@ jobs:
           echo "Key URL: https://demetrius-ch.github.io/forgekit/forgekit-archive-keyring.gpg"
           echo ""
           echo "Install with:"
-          echo "  curl -fsSL https://demetrius-ch.github.io/forgekit/forgekit-archive-keyring.gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/forgekit.gpg"
-          echo "  echo \"deb https://demetrius-ch.github.io/forgekit stable main\" | sudo tee /etc/apt/sources.list.d/forgekit.list"
-          echo "  sudo apt update && sudo apt install forge"
+          echo "  curl -fsSL https://demetrius-ch.github.io/forgekit/forgekit-archive-keyring.gpg | sudo gpg --dearmor -o /usr/share/keyrings/forgekit-archive-keyring.gpg"
+          echo "  echo \"deb [signed-by=/usr/share/keyrings/forgekit-archive-keyring.gpg] https://demetrius-ch.github.io/forgekit stable main\" | sudo tee /etc/apt/sources.list.d/forgekit.sources"
+          echo "  sudo apt update && sudo apt install forgekit"

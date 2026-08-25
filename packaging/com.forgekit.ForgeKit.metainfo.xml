@@ -16,7 +16,7 @@
   <url type="homepage">https://github.com/Demetrius-ch/forgekit</url>
   <url type="bugtracker">https://github.com/Demetrius-ch/forgekit/issues</url>
   <url type="help">https://github.com/Demetrius-ch/forgekit#usage</url>
-  <repository>https://github.com/Demetrius-ch/forgekit.git</repository>
+  
   <icon type="stock">com.forgekit.ForgeKit</icon>
   <categories>
     <category>Development</category>
@@ -31,9 +31,15 @@
     <keyword>cli</keyword>
   </keywords>
   <provides>
+    <binary>forgekit</binary>
     <binary>forge</binary>
   </provides>
   <releases>
+    <release version="0.3.1" date="2026-08-25">
+      <description>
+        <p>Package renamed to forgekit, binary forgekit with forge alias</p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-08-21">
       <description>
         <p>Initial release with APT repository support</p>

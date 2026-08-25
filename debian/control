@@ -2,20 +2,23 @@ Source: forgekit
 Section: devel
 Priority: optional
 Maintainer: ForgeKit Maintainers <forgekit@demetrius-ch.github.io>
-Build-Depends: debhelper-compat (= 13),
-               golang-any,
-               dh-golang,
-               git
+Build-Depends: debhelper-compat (= 13), golang-go, git
 Standards-Version: 4.6.2
 Homepage: https://github.com/Demetrius-ch/forgekit
 Vcs-Git: https://github.com/Demetrius-ch/forgekit.git
 Vcs-Browser: https://github.com/Demetrius-ch/forgekit
-Rules-Requires-Root: no
 
-Package: forge
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Go CLI for generating production-ready REST APIs
- ForgeKit creates and maintains Go REST APIs using a clean
- hexagonal architecture with PostgreSQL, Docker, migrations,
- and automatic tests.
+Package: forgekit
+Architecture: amd64 arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}, libc6, ca-certificates
+Recommends: docker.io, docker-compose
+Replaces: forge
+Provides: forge
+Description: Go CLI for generating, managing, analyzing and diagnosing backend APIs
+ ForgeKit is a developer CLI written in Go that helps you bootstrap backend REST APIs
+ without manually creating the same project structure, configuration, database integration,
+ Docker files, migrations, and tests every time.
+ .
+ Build production-ready REST APIs with hexagonal architecture.
+ Scaffolds projects with PostgreSQL, Docker, migrations, tests.
+ Provides: forge add, forge remove, forge doctor, forge analyze, forge check, forge inspect.
