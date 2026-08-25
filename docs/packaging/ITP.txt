@@ -1,0 +1,44 @@
+To: submit@bugs.debian.org
+Subject: ITP: forgekit -- Go backend generator and project management CLI
+X-Debbugs-CC: forgekit@demetrius-ch.github.io
+
+Package: wnpp
+Severity: wishlist
+Owner: ForgeKit Maintainers <forgekit@demetrius-ch.github.io>
+
+* Package name : forgekit
+* Version : 0.3.4
+* Upstream Author : ForgeKit Contributors <forgekit@demetrius-ch.github.io>
+* URL : https://github.com/Demetrius-ch/forgekit
+* License : MIT
+* Programming Lang : Go
+* Description : Go CLI for generating, managing, analyzing and diagnosing
+  backend APIs with hexagonal architecture
+
+ForgeKit is a developer CLI written in Go that helps you bootstrap backend
+REST APIs without manually creating the same project structure,
+configuration, database integration, Docker files, migrations, and tests
+every time.
+
+It generates production-ready Go REST APIs with a clean hexagonal
+architecture, including PostgreSQL integration, Docker Compose, database
+migrations, environment configuration, and automatic tests.
+
+Features:
+- Project scaffolding with hexagonal architecture
+- PostgreSQL + Docker Compose + migrations
+- Feature system (forgekit add/remove): auth, cors, logging, swagger
+- Architecture validation (forgekit doctor, forgekit check, forgekit analyze)
+- Project inspection (forgekit inspect)
+- Extensible CLI with JSON output and CI modes
+
+The package provides backward compatibility via the `forge` symlink.
+
+For the Debian packaging, we use GoReleaser with nfpm for building the .deb,
+and dh-golang for the source package. The package is built with
+CGO_ENABLED=0 for static linking.
+
+The source package is available at:
+https://github.com/Demetrius-ch/forgekit
+
+This is our first Debian package submission. We are looking for a sponsor.

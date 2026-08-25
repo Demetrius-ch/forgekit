@@ -1,0 +1,131 @@
+.TH FORGEKIT 1 "2026-08-25" "ForgeKit 0.3.4" "User Commands"
+.SH NAME
+forgekit \- Go CLI for generating, managing, analyzing and diagnosing backend APIs
+.SH SYNOPSIS
+.B forgekit
+[\fIcommand\fR] [\fIoptions\fR]
+.SH DESCRIPTION
+.B ForgeKit
+is a developer CLI written in Go that helps you bootstrap backend REST APIs
+without manually creating the same project structure, configuration, database
+integration, Docker files, migrations, and tests every time.
+
+It generates production-ready Go REST APIs with a clean hexagonal architecture,
+including PostgreSQL integration, Docker Compose, database migrations,
+environment configuration, and automatic tests.
+
+ForgeKit also provides a feature system to extend generated projects with
+additional capabilities (authentication, CORS, logging, Swagger/OpenAPI),
+and validation tools to ensure architectural compliance.
+.SH COMMANDS
+.TP
+.B init
+Initialize a new ForgeKit project
+.TP
+.B add
+Add a feature to an existing project
+.TP
+.B remove
+Remove a feature from an existing project
+.TP
+.B analyze
+Analyze the project structure and practices
+.TP
+.B check
+Validate architectural conventions
+.TP
+.B doctor
+Diagnose the development environment and project health
+.TP
+.B inspect
+Inspect the ForgeKit project signature
+.TP
+.B remove
+Remove a feature from an existing project
+.TP
+.B version
+Print version information
+.TP
+.B config
+Manage ForgeKit configuration
+.TP
+.B completion
+Generate shell completion scripts
+.TP
+.B help
+Show help for any command
+.SH OPTIONS
+.TP
+.B \-\-debug
+Enable debug output
+.TP
+.B \-\-format \fIformat\fR
+Output format: human, json (default: human)
+.TP
+.B \-\-quiet
+Reduce output (except errors and JSON)
+.TP
+.B \-h, \-\-help
+Show help
+.TP
+.B \-\-version
+Print version
+.SH EXAMPLES
+.TP
+Initialize a new project interactively:
+.B forgekit init my-api
+.TP
+Initialize non-interactively:
+.B forgekit init my-api --module github.com/example/my-api --port 8080 --non-interactive
+.TP
+List available features:
+.B forgekit add --list
+.TP
+Install a feature with preview:
+.B forgekit add auth --plan
+.TP
+Install a feature:
+.B forgekit add auth
+.TP
+Analyze project in CI mode:
+.B forgekit analyze --ci
+.TP
+Check project health:
+.B forgekit doctor
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+Error or warning (in CI mode)
+.TP
+.B 2
+Execution error
+.SH FILES
+.TP
+.I ~/.forgekit/config.yaml
+User configuration
+.TP
+.I ./forge.yaml
+Project configuration
+.TP
+.I ./.forge/features.yaml
+Installed features tracking
+.SH SEE ALSO
+.BR forgekit-init (1),
+.BR forgekit-add (1),
+.BR forgekit-remove (1),
+.BR forgekit-analyze (1),
+.BR forgekit-check (1),
+.BR forgekit-doctor (1),
+.BR forgekit-inspect (1),
+.BR forgekit-version (1),
+.BR forgekit-config (1),
+.BR forgekit-completion (1)
+.SH AUTHOR
+ForgeKit Contributors <forgekit@demetrius-ch.github.io>
+.SH REPORTING BUGS
+https://github.com/Demetrius-ch/forgekit/issues
+.SH COPYRIGHT
+2024-2026, ForgeKit Contributors. Licensed under MIT.

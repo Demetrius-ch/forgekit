@@ -1,0 +1,92 @@
+.TH FORGEKIT-INIT 1 "2026-08-25" "ForgeKit 0.3.4" "User Commands"
+.SH NAME
+forgekit-init \- Initialize a new ForgeKit project
+.SH SYNOPSIS
+.B forgekit init
+\fIproject-name\fR [\fIoptions\fR]
+.SH DESCRIPTION
+Initialize a new ForgeKit project with hexagonal architecture, PostgreSQL,
+Docker Compose, database migrations, environment configuration, and tests.
+
+The command interactively prompts for configuration unless
+.B \-\-non-interactive
+is specified.
+.SH OPTIONS
+.TP
+.B \-\-author \fIstring\fR
+Project author name
+.TP
+.B \-\-db-name \fIstring\fR
+PostgreSQL database name (default: project name with underscores)
+.TP
+.B \-\-dir \fIstring\fR
+Target directory (default: project name)
+.TP
+.B \-\-dry-run
+Show the generation plan without writing to disk
+.TP
+.B \-\-module \fIstring\fR
+Go module path (e.g., github.com/user/project)
+.TP
+.B \-\-non-interactive
+Run without interactive prompts (requires \fI\-\-module\fR)
+.TP
+.B \-\-port \fIint\fR
+HTTP server port (default: 8080)
+.TP
+.B \-\-postgres-port \fIint\fR
+PostgreSQL host port (default: 5432)
+.TP
+.B \-\-skip-postprocess
+Skip gofmt and go test after generation
+.TP
+.B \-h, \-\-help
+Show help
+.SH GLOBAL OPTIONS
+.TP
+.B \-\-debug
+Enable debug output
+.TP
+.B \-\-format \fIformat\fR
+Output format: human, json (default: human)
+.TP
+.B \-\-quiet
+Reduce output (except errors and JSON)
+.SH EXAMPLES
+.TP
+Interactive initialization:
+.B forgekit init my-api
+.TP
+Non-interactive initialization:
+.B forgekit init my-api --module github.com/example/my-api --port 8080 --non-interactive
+.TP
+Custom directory:
+.B forgekit init my-api --dir /tmp/my-api
+.TP
+Preview without creating:
+.B forgekit init my-api --dry-run
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+Error or invalid configuration
+.TP
+.B 2
+Execution error
+.SH FILES
+.TP
+.I ./forge.yaml
+Project configuration (created)
+.TP
+.I ./.forge/features.yaml
+Installed features tracking (created)
+.TP
+.I .env.example
+Environment configuration template (created)
+.SH SEE ALSO
+.BR forgekit (1),
+.BR forgekit-add (1)
+.SH AUTHOR
+ForgeKit Contributors <forgekit@demetrius-ch.github.io>

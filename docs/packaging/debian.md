@@ -6,7 +6,7 @@ This document describes the Debian packaging for ForgeKit, including build proce
 
 - **Package name**: `forgekit`
 - **Binary name**: `forgekit` (with `forge` symlink for backward compatibility)
-- **Version**: 0.3.1+
+- **Version**: 0.3.4+
 - **Section**: devel
 - **Priority**: optional
 - **License**: MIT
@@ -56,7 +56,7 @@ Key configuration files:
 ### Dependencies
 
 - **Depends**: `libc6`, `ca-certificates`
-- **Recommends**: `docker.io`, `docker-compose`
+- **Recommends**: `docker.io`, `docker-compose-v2`
 - **Build-Depends**: `golang-go` (for building from source)
 
 The binary is statically compiled with `CGO_ENABLED=0`, so it has minimal runtime dependencies.
@@ -73,11 +73,13 @@ sudo apt update && sudo apt install lintian
 lintian forgekit_*.deb
 ```
 
-Expected results (as of v0.3.1):
+Expected results (as of v0.3.4):
 - **Errors**: `statically-linked-binary` (expected for Go binaries)
-- **Warnings**: `initial-upload-closes-no-bugs`, `no-manual-page`, `unknown-field Architecture-Variant`
+- **Warnings**: `initial-upload-closes-no-bugs`, `no-manual-page [usr/bin/forge]`, `unknown-field Architecture-Variant`
 
-All critical issues are resolved.
+All critical issues are resolved. The `statically-linked-binary` error is expected
+for Go binaries compiled with `CGO_ENABLED=0`. The `no-manual-page` warning is
+for the `forge` symlink (which points to `forgekit`).
 
 ### AppStream Validation
 
@@ -220,10 +222,58 @@ The packaging is integrated with GitHub Actions:
 
 All workflows triggered on git tag push (v*).
 
-## References
+## Debian ITP (Intent To Package)
 
-- [Debian Policy Manual](https://www.debian.org/doc/debian-policy/)
-- [Debian New Maintainers' Guide](https://www.debian.org/doc/manuals/maint-guide/)
-- [nfpm Documentation](https://nfpm.goreleaser.com/)
-- [GoReleaser Documentation](https://goreleaser.com/)
-- [AppStream Metadata](https://www.freedesktop.org/software/appstream/docs/chap-Metadata.html)
+ForgeKit is being prepared for submission to the Debian project via the
+ITP (Intent To Package) process.
+
+### ITP Message
+
+See `docs/packaging/ITP.txt` for the complete ITP message to be submitted
+to `submit@bugs.debian.org`.
+
+### Package Details
+
+- **Package**: `forgekit`
+- **Upstream**: https://github.com/Demetrius-ch/forgekit
+- **License**: MIT
+- **Language**: Go
+- **Type**: Developer CLI / Go backend generator
+- **Main command**: `forgekit`
+- **Compatibility**: `forge` (symlink)
+
+### ITP Submission Steps
+
+1. Verify package doesn't exist in Debian:
+   ```bash
+   apt-cache search forgekit
+   # Check https://packages.debian.org/search?keywords=forgekit
+   ```
+
+2. Submit ITP bug report:
+   ```bash
+   # Use the template in docs/packaging/ITP.txt
+   # Submit to: submit@bugs.debian.org
+   ```
+
+3. Prepare source package:
+   ```bash
+   # Build source package
+   dpkg-buildpackage -S -sa
+   
+   # Or with debhelper
+   debuild -S -sa
+   ```
+
+4. Find a sponsor via mentors.debian.net
+
+### Debian Standards Compliance
+
+- Standards-Version: 4.6.2
+- Build-Depends: debhelper-compat (= 13), golang-go, git
+- Uses dh-golang for building
+- Man pages installed via dh_installman
+- AppStream metadata validated
+- Lintian cleaned (only acceptable warnings remain)
+
+## References

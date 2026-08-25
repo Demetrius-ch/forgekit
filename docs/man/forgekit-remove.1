@@ -1,0 +1,59 @@
+.TH FORGEKIT-REMOVE 1 "2026-08-25" "ForgeKit 0.3.4" "User Commands"
+.SH NAME
+forgekit-remove \- Remove a feature from an existing ForgeKit project
+.SH SYNOPSIS
+.B forgekit remove
+\fIfeature\fR [\fIoptions\fR]
+.SH DESCRIPTION
+Remove a previously installed feature from a ForgeKit project. Before removal,
+ForgeKit verifies that no other installed features depend on the feature
+being removed and detects user modifications to feature files.
+.SH OPTIONS
+.TP
+.B \-\-plan
+Show the removal plan without making changes
+.TP
+.B \-h, \-\-help
+Show help
+.SH GLOBAL OPTIONS
+.TP
+.B \-\-debug
+Enable debug output
+.TP
+.B \-\-format \fIformat\fR
+Output format: human, json (default: human)
+.TP
+.B \-\-quiet
+Reduce output (except errors and JSON)
+.SH EXAMPLES
+.TP
+Preview auth feature removal:
+.B forgekit remove auth --plan
+.TP
+Remove auth feature:
+.B forgekit remove auth
+.TP
+Remove with JSON output:
+.B forgekit remove auth --format json
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+Feature not installed, dependency conflict, or user modifications detected
+.TP
+.B 2
+Execution error
+.SH FILES
+.TP
+.I ./.forge/features.yaml
+Installed features tracking (updated)
+.TP
+.I ./forge.yaml
+Project configuration (may be updated)
+.SH SEE ALSO
+.BR forgekit (1),
+.BR forgekit-add (1)
+.SH AUTHOR
+ForgeKit Contributors <forgekit@demetrius-ch.github.io>

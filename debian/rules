@@ -16,6 +16,16 @@ override_dh_auto_install:
 	install -D -m 644 packaging/com.forgekit.ForgeKit.metainfo.xml debian/forgekit/usr/share/metainfo/com.forgekit.ForgeKit.metainfo.xml
 	# Install icon
 	install -D -m 644 packaging/icons/hicolor/scalable/apps/forgekit.svg debian/forgekit/usr/share/icons/hicolor/scalable/apps/forgekit.svg
+	# Install man pages
+	install -D -m 644 docs/man/forgekit.1.gz debian/forgekit/usr/share/man/man1/forgekit.1.gz
+	install -D -m 644 docs/man/forgekit-init.1.gz debian/forgekit/usr/share/man/man1/forgekit-init.1.gz
+	install -D -m 644 docs/man/forgekit-add.1.gz debian/forgekit/usr/share/man/man1/forgekit-add.1.gz
+	install -D -m 644 docs/man/forgekit-remove.1.gz debian/forgekit/usr/share/man/man1/forgekit-remove.1.gz
+	install -D -m 644 docs/man/forgekit-analyze.1.gz debian/forgekit/usr/share/man/man1/forgekit-analyze.1.gz
+	install -D -m 644 docs/man/forgekit-check.1.gz debian/forgekit/usr/share/man/man1/forgekit-check.1.gz
+	install -D -m 644 docs/man/forgekit-doctor.1.gz debian/forgekit/usr/share/man/man1/forgekit-doctor.1.gz
+	install -D -m 644 docs/man/forgekit-inspect.1.gz debian/forgekit/usr/share/man/man1/forgekit-inspect.1.gz
+	install -D -m 644 docs/man/forgekit-version.1.gz debian/forgekit/usr/share/man/man1/forgekit-version.1.gz
 
 override_dh_installchangelogs:
 	dh_installchangelogs debian/changelog

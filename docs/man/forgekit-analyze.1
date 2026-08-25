@@ -1,0 +1,79 @@
+.TH FORGEKIT-ANALYZE 1 "2026-08-25" "ForgeKit 0.3.4" "User Commands"
+.SH NAME
+forgekit-analyze \- Analyze the project structure and practices
+.SH SYNOPSIS
+.B forgekit analyze
+[\fIoptions\fR]
+.SH DESCRIPTION
+Analyze a ForgeKit project across multiple categories: architecture, tests,
+security, configuration, Docker, and documentation. Provides category scores
+(0-100), a global score, and recommendations for improvement.
+.SH OPTIONS
+.TP
+.B \-\-ci
+CI/CD mode: non-interactive, deterministic, exit codes 0/1/2, no spinners
+.TP
+.B \-h, \-\-help
+Show help
+.SH GLOBAL OPTIONS
+.TP
+.B \-\-debug
+Enable debug output
+.TP
+.B \-\-format \fIformat\fR
+Output format: human, json (default: human)
+.TP
+.B \-\-quiet
+Reduce output (except errors and JSON)
+.SH EXAMPLES
+.TP
+Analyze current project:
+.B forgekit analyze
+.TP
+Analyze in CI mode:
+.B forgekit analyze --ci
+.TP
+Analyze with JSON output:
+.B forgekit analyze --format json
+.SH CATEGORIES
+.TP
+.B Architecture
+Hexagonal structure, dependency direction, separation of concerns
+.TP
+.B Tests
+Test coverage, table-driven tests, test organization
+.TP
+.B Security
+Dependencies, secrets, input validation, authentication
+.TP
+.B Configuration
+Environment variables, .env files, config structure
+.TP
+.B Docker
+Dockerfile, docker-compose, multi-stage builds
+.TP
+.B Documentation
+README, API docs, code comments
+.SH EXIT STATUS
+.TP
+.B 0
+Success (global score >= 70 or not in CI mode)
+.TP
+.B 1
+Issues detected (global score < 70 in CI mode)
+.TP
+.B 2
+Execution error
+.SH FILES
+.TP
+.I ./forge.yaml
+Project configuration
+.TP
+.I ./.forge/features.yaml
+Installed features
+.SH SEE ALSO
+.BR forgekit (1),
+.BR forgekit-doctor (1),
+.BR forgekit-check (1)
+.SH AUTHOR
+ForgeKit Contributors <forgekit@demetrius-ch.github.io>

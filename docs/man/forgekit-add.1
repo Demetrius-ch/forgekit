@@ -1,0 +1,85 @@
+.TH FORGEKIT-ADD 1 "2026-08-25" "ForgeKit 0.3.4" "User Commands"
+.SH NAME
+forgekit-add \- Add a feature to an existing ForgeKit project
+.SH SYNOPSIS
+.B forgekit add
+[\fIfeature\fR] [\fIoptions\fR]
+.SH DESCRIPTION
+Add a feature to an existing ForgeKit project. Features extend the project
+with additional capabilities such as authentication, CORS, logging, or
+Swagger/OpenAPI documentation.
+
+Features can declare dependencies on other features, which are automatically
+resolved and installed first.
+.SH OPTIONS
+.TP
+.B \-\-list
+List all available features with versions and descriptions
+.TP
+.B \-\-plan
+Show the installation plan without making changes (files to create/modify/delete, conflicts, dependencies)
+.TP
+.B \-\-dry-run
+Alias for \fI\-\-plan\fR
+.TP
+.B \-h, \-\-help
+Show help
+.SH GLOBAL OPTIONS
+.TP
+.B \-\-debug
+Enable debug output
+.TP
+.B \-\-format \fIformat\fR
+Output format: human, json (default: human)
+.TP
+.B \-\-quiet
+Reduce output (except errors and JSON)
+.SH EXAMPLES
+.TP
+List available features:
+.B forgekit add --list
+.TP
+Preview auth feature installation:
+.B forgekit add auth --plan
+.TP
+Install auth feature:
+.B forgekit add auth
+.TP
+Install with JSON output:
+.B forgekit add auth --format json
+.SH FEATURES
+.TP
+.B auth
+JWT authentication infrastructure (middleware, token validation)
+.TP
+.B cors
+CORS middleware for cross-origin requests (depends on auth)
+.TP
+.B logging
+Structured logging and HTTP middleware (depends on auth)
+.TP
+.B swagger
+OpenAPI/Swagger documentation (depends on cors)
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+Feature not found, dependency conflict, or project not a ForgeKit project
+.TP
+.B 2
+Execution error
+.SH FILES
+.TP
+.I ./.forge/features.yaml
+Installed features tracking (updated)
+.TP
+.I ./forge.yaml
+Project configuration (may be updated)
+.SH SEE ALSO
+.BR forgekit (1),
+.BR forgekit-remove (1),
+.BR forgekit-doctor (1)
+.SH AUTHOR
+ForgeKit Contributors <forgekit@demetrius-ch.github.io>

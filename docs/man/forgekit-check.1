@@ -1,0 +1,54 @@
+.TH FORGEKIT-CHECK 1 "2026-08-25" "ForgeKit 0.3.4" "User Commands"
+.SH NAME
+forgekit-check \- Validate architectural conventions
+.SH SYNOPSIS
+.B forgekit check
+[\fIoptions\fR]
+.SH DESCRIPTION
+Validate architectural conventions of a ForgeKit project. Checks include
+hexagonal architecture compliance, dependency direction, naming conventions,
+and separation of concerns.
+.SH OPTIONS
+.TP
+.B \-h, \-\-help
+Show help
+.SH GLOBAL OPTIONS
+.TP
+.B \-\-debug
+Enable debug output
+.TP
+.B \-\-format \fIformat\fR
+Output format: human, json (default: human)
+.TP
+.B \-\-quiet
+Reduce output (except errors and JSON)
+.SH EXAMPLES
+.TP
+Check current project:
+.B forgekit check
+.TP
+Check with JSON output:
+.B forgekit check --format json
+.SH EXIT STATUS
+.TP
+.B 0
+All checks passed
+.TP
+.B 1
+Architectural violations found
+.TP
+.B 2
+Execution error
+.SH FILES
+.TP
+.I ./forge.yaml
+Project configuration
+.TP
+.I ./.forge/features.yaml
+Installed features
+.SH SEE ALSO
+.BR forgekit (1),
+.BR forgekit-analyze (1),
+.BR forgekit-doctor (1)
+.SH AUTHOR
+ForgeKit Contributors <forgekit@demetrius-ch.github.io>

@@ -34,3 +34,8 @@ apt/gpg/forgekit-apt-private-key.gpg
 integrations/vscode/node_modules/
 integrations/vscode/out/
 integrations/vscode/*.vsix
+
+# Snapcraft build artifacts
+snap/parts/
+snap/prime/
+snap/*.snap

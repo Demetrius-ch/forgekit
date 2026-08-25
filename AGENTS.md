@@ -1,20 +1,20 @@
 # AGENTS.md — ForgeKit
 
-## Project Overview
-ForgeKit is a Go CLI tool that generates production-ready REST APIs with hexagonal architecture. It scaffolds projects with PostgreSQL, Docker, migrations, tests, and provides `doctor`, `check`, `analyze`, `inspect`, `config`, `add`, `remove`, `version` commands for validation and extension.
+## Aperçu du projet
+ForgeKit est un outil CLI en Go qui génère des APIs REST prêtes pour la production avec une architecture hexagonale. Il scaffolde des projets avec PostgreSQL, Docker, migrations, tests, et fournit les commandes `doctor`, `check`, `analyze`, `inspect`, `config`, `add`, `remove`, `version` pour la validation et l'extension.
 
-## Build & Test Commands
+## Commandes de build et test
 
 ```bash
-# Build the CLI
+# Build du CLI
 go build -o forge ./cmd/forge
 
-# Run all tests (CI order: vet -> test -> build)
+# Lancer tous les tests (ordre CI : vet -> test -> build)
 go vet ./...
 go test ./...
 go build ./...
 
-# Run single package tests
+# Lancer les tests d'un package spécifique
 go test ./internal/generator/...
 go test ./internal/feature/...
 go test ./internal/cli/...
@@ -25,101 +25,100 @@ go test ./internal/forge/...
 go test ./internal/dbinspect/...
 go test ./internal/ports/...
 
-# Run e2e tests (requires build tag)
+# Lancer les tests e2e (nécessite le build tag)
 go test -tags=e2e ./internal/e2e/...
 
-# Integration test (runs in CI)
+# Test d'intégration (exécuté en CI)
 ./forge init ci-api --non-interactive --module github.com/Demetrius-ch/ci-api
 cd ci-api && go test ./...
 ```
 
-## Makefile Targets
+## Cibles Makefile
 ```bash
-make build          # Build forge binary (development)
-make test           # Run all tests
-make vet            # Run go vet
-make lint           # Run gofmt -w .
-make build-linux    # Build static Linux binary (CGO_ENABLED=0)
-make package        # Build release artifacts with GoReleaser (snapshot)
-make clean          # Remove build artifacts
-make ci             # Full CI pipeline (lint -> vet -> test -> build)
+make build          # Build le binaire forge (développement)
+make test           # Lance tous les tests
+make vet            # Lance go vet
+make lint           # Lance gofmt -w .
+make build-linux    # Build binaire Linux statique (CGO_ENABLED=0)
+make package        # Build artefacts de release avec GoReleaser (snapshot)
+make clean          # Supprime les artefacts de build
+make ci             # Pipeline CI complet (lint -> vet -> test -> build)
 ```
 
-## Key Architecture
+## Architecture clé
 
-- **cmd/forge/main.go** — Entry point, delegates to `internal/cli`
-- **internal/cli/commands.go** — All CLI commands (init, add, remove, doctor, check, analyze, inspect, config, version)
-- **internal/cli/root.go** — Root command setup, global flags, branding
-- **internal/generator/** — Project generation logic (templates in `internal/template/`)
-- **internal/template/api/** — Go text/template files for generated project structure
-- **internal/feature/** — Feature registry for `forge add`/`forge remove` (interface, detector, installer, registry)
-- **internal/feature/auth/** — JWT authentication feature implementation
-- **internal/feature/cors/** — CORS middleware feature implementation
-- **internal/feature/logging/** — Logging feature implementation
-- **internal/feature/swagger/** — Swagger/OpenAPI feature implementation
-- **internal/rules/** — Architectural rules for check/analyze (security, architecture, quality, environment, docker, config)
-- **internal/analyzer/project.go** — Project analysis logic
-- **internal/app/** — App metadata (name, version, slogan)
-- **internal/config/** — User config (~/.forgekit/config.yaml) and project config (forge.yaml)
-- **internal/output/** — Console output utilities (spinner, colored output, JSON)
-- **internal/engine/** — Template execution engine with variables
-- **internal/report/** — Scoring and reporting for analyze
-- **internal/errs/** — Error types
-- **internal/prompt/** — Interactive prompts
-- **internal/template/** — Template rendering engine
-- **internal/ports/** — Port availability checking for generated projects
-- **internal/dbinspect/** — Database inspection (migrations, schema)
-- **internal/forge/** — Project signature validation, metadata, feature tracking (.forge/forge.yaml, .forge/features.yaml)
-- **pkg/generator/** — Shared generator types
+- **cmd/forge/main.go** — Point d'entrée, délègue à `internal/cli`
+- **internal/cli/commands.go** — Toutes les commandes CLI (init, add, remove, doctor, check, analyze, inspect, config, version)
+- **internal/cli/root.go** — Configuration commande racine, flags globaux, branding
+- **internal/generator/** — Logique de génération de projet (templates dans `internal/template/`)
+- **internal/template/api/** — Fichiers Go text/template pour la structure du projet généré
+- **internal/feature/** — Registre de features pour `forge add`/`forge remove` (interface, detector, installer, registry)
+- **internal/feature/auth/** — Implémentation feature authentification JWT
+- **internal/feature/cors/** — Implémentation feature middleware CORS
+- **internal/feature/logging/** — Implémentation feature logging
+- **internal/feature/swagger/** — Implémentation feature Swagger/OpenAPI
+- **internal/rules/** — Règles architecturales pour check/analyze (sécurité, architecture, qualité, environnement, docker, config)
+- **internal/analyzer/project.go** — Logique d'analyse de projet
+- **internal/app/** — Métadonnées de l'app (nom, version, slogan)
+- **internal/config/** — Config utilisateur (~/.forgekit/config.yaml) et config projet (forge.yaml)
+- **internal/output/** — Utilitaires console (spinner, sortie colorée, JSON)
+- **internal/engine/** — Moteur d'exécution de templates avec variables
+- **internal/report/** — Scoring et reporting pour analyze
+- **internal/errs/** — Types d'erreurs
+- **internal/prompt/** — Prompts interactifs
+- **internal/template/** — Moteur de rendu de templates
+- **internal/ports/** — Vérification disponibilité ports pour projets générés
+- **internal/dbinspect/** — Inspection BDD (migrations, schéma)
+- **internal/forge/** — Validation signature projet, métadonnées, suivi features (.forge/forge.yaml, .forge/features.yaml)
+- **pkg/generator/** — Types partagés du générateur
 
-Note: `internal/doctor`, `internal/analyze`, `internal/arch`, `internal/project` are empty directories; `internal/check` does not exist; logic lives in `cli/commands.go` and `rules/`.
+Note : `internal/doctor`, `internal/analyze`, `internal/arch`, `internal/project` sont des dossiers vides ; `internal/check` n'existe pas ; la logique se trouve dans `cli/commands.go` et `rules/`.
 
-## Dependencies
-- `github.com/spf13/cobra` — CLI framework
-- `gopkg.in/yaml.v3` — YAML config parsing
-- `github.com/jackc/pgx/v5` — PostgreSQL driver (generated projects)
-- Go 1.26 (per go.mod), CI uses 1.22 (see `.github/workflows/ci.yml`)
+## Dépendances
+- `github.com/spf13/cobra` — Framework CLI
+- `gopkg.in/yaml.v3` — Parsing YAML config
+- `github.com/jackc/pgx/v5` — Driver PostgreSQL (projets générés)
+- Go 1.26 (selon go.mod), CI utilise 1.22 (voir `.github/workflows/ci.yml`)
 
-## Generated Project Stack (Fixed in V0.1)
-- Go stdlib `net/http` with **Chi router** (`github.com/go-chi/chi/v5`)
-- PostgreSQL with `database/sql` — no GORM
-- Docker Compose for local dev
-- Environment config via `.env` (caarlos0/env pattern)
-- Table-driven tests + testcontainers-go optional
+## Stack du projet généré (figée en V0.1)
+- Go stdlib `net/http` avec **Chi router** (`github.com/go-chi/chi/v5`)
+- PostgreSQL avec `database/sql` — pas de GORM
+- Docker Compose pour le dev local
+- Config environnement via `.env` (pattern caarlos0/env)
+- Tests table-driven + testcontainers-go optionnel
 
-## Feature Dependency Graph
+## Graphe de dépendances des features
 ```
-auth (no deps)
-  └── cors (depends on auth)
-  └── logging (depends on auth)
-      └── swagger (depends on cors)
+auth (pas de deps)
+  └── cors (dépend de auth)
+  └── logging (dépend de auth)
+      └── swagger (dépend de cors)
 ```
 
-## Common Tasks
+## Tâches courantes
 
-### Add a new CLI command
-1. Add command in `internal/cli/commands.go`
-2. Register in `internal/cli/root.go` (in `NewRootCommand`)
-3. Add tests in `internal/cli/commands_test.go`
+### Ajouter une nouvelle commande CLI
+1. Ajouter la commande dans `internal/cli/commands.go`
+2. Enregistrer dans `internal/cli/root.go` (dans `NewRootCommand`)
+3. Ajouter les tests dans `internal/cli/commands_test.go`
 
-### Modify generated project templates
-Edit files in `internal/template/api/` — these are Go text/template files.
+### Modifier les templates de projet généré
+Éditer les fichiers dans `internal/template/api/` — ce sont des fichiers Go text/template.
 
-### Add a new `forge add` / `forge remove` feature
-1. Implement the `Feature` interface in `internal/feature/<name>/`
-2. Add template files in `internal/template/api/internal/<name>/`
-3. Register the feature in `internal/cli/commands.go` in `newAddCommand()` and `newRemoveCommand()` (see `auth.AuthFeature{}, cors.CorsFeature{}, logging.LoggingFeature{}, swagger.SwaggerFeature{}`)
+### Ajouter une nouvelle feature `forge add` / `forge remove`
+1. Implémenter l'interface `Feature` dans `internal/feature/<nom>/`
+2. Ajouter les fichiers template dans `internal/template/api/internal/<nom>/`
+3. Enregistrer la feature dans `internal/cli/commands.go` dans `newAddCommand()` et `newRemoveCommand()` (voir `auth.AuthFeature{}, cors.CorsFeature{}, logging.LoggingFeature{}, swagger.SwaggerFeature{}`)
 
-## CI Pipeline (`.github/workflows/ci.yml`)
-Runs on push/PR to main/master (uses Go 1.22):
+## Pipeline CI (`.github/workflows/ci.yml`)
+S'exécute sur push/PR vers main/master (utilise Go 1.22) :
 1. `go mod download`
 2. `go vet ./...`
 3. `go test ./...`
 4. `go build -o forge ./cmd/forge`
-5. Integration test: `forge init` + `go test ./...` in generated project
+5. Test d'intégration : `forge init` + `go test ./...` dans le projet généré
 
-## Pre-commit / Contribution Checks
-From README contributing section:
+## Vérifications pre-commit / contribution
 ```bash
 gofmt -w .
 go test ./...
@@ -127,9 +126,9 @@ go vet ./...
 go build ./...
 ```
 
-## Packages Without Tests
-These internal packages currently have no test files:
-- `cmd/forge` (entry point, expected)
+## Packages sans tests
+Ces packages internes n'ont actuellement pas de fichiers de test :
+- `cmd/forge` (point d'entrée, normal)
 - `internal/analyzer`
 - `internal/app`
 - `internal/config`
@@ -139,24 +138,24 @@ These internal packages currently have no test files:
 - `internal/template`
 - `pkg/generator`
 
-## Environment
-- Requires Docker for generated project's Docker workflow
-- Uses `.env.example` as template for generated projects
-- Default API port: 8080
-- User config at `~/.forgekit/config.yaml`
-- Project config at `forge.yaml` in generated projects
+## Environnement
+- Nécessite Docker pour le workflow Docker du projet généré
+- Utilise `.env.example` comme template pour les projets générés
+- Port API par défaut : 8080
+- Config utilisateur à `~/.forgekit/config.yaml`
+- Config projet à `forge.yaml` dans les projets générés
 
-## Release Process
-- Uses GoReleaser (`.goreleaser.yaml`)
-- Builds for linux/amd64 and linux/arm64
-- Creates .tar.gz archives, .deb packages, and SHA256 checksums
-- Version injected via ldflags: `github.com/Demetrius-ch/forgekit/internal/app.Version`
-- Release triggered by git tags
+## Processus de release
+- Utilise GoReleaser (`.goreleaser.yaml`)
+- Build pour linux/amd64 et linux/arm64
+- Crée archives .tar.gz, packages .deb, et checksums SHA256
+- Version injectée via ldflags : `github.com/Demetrius-ch/forgekit/internal/app.Version`
+- Release déclenchée par tags git (v*)
 
-## Useful References
-- `README.md` — User-facing docs, usage examples
-- `projects.md` — Product vision and roadmap
-- `explication.md` — Competitive analysis and positioning
-- `.github/workflows/ci.yml` — Authoritative CI commands
-- `Makefile` — Development commands
-- `.goreleaser.yaml` — Release configuration
+## Références utiles
+- `README.md` — Docs utilisateur, exemples d'usage
+- `projects.md` — Vision produit et roadmap
+- `explication.md` — Analyse concurrentielle et positionnement
+- `.github/workflows/ci.yml` — Commandes CI autoritatives
+- `Makefile` — Commandes de développement
+- `.goreleaser.yaml` — Configuration release

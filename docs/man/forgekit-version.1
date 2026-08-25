@@ -1,0 +1,58 @@
+.TH FORGEKIT-VERSION 1 "2026-08-25" "ForgeKit 0.3.4" "User Commands"
+.SH NAME
+forgekit-version \- Print version information
+.SH SYNOPSIS
+.B forgekit version
+[\fIoptions\fR]
+.SH DESCRIPTION
+Print the ForgeKit version information including the version number and
+build metadata.
+.SH OPTIONS
+.TP
+.B \-h, \-\-help
+Show help
+.SH GLOBAL OPTIONS
+.TP
+.B \-\-debug
+Enable debug output
+.TP
+.B \-\-format \fIformat\fR
+Output format: human, json (default: human)
+.TP
+.B \-\-quiet
+Reduce output (except errors and JSON)
+.SH EXAMPLES
+.TP
+Print version:
+.B forgekit version
+.TP
+Print version with JSON output:
+.B forgekit version --format json
+.SH OUTPUT FORMAT
+Human format:
+.PP
+.nf
+forge version 0.3.4
+Build • Extend • Ship
+.fi
+.PP
+JSON format:
+.PP
+.nf
+{
+  "version": "0.3.4",
+  "build_time": "2026-08-25T12:00:00Z",
+  "git_commit": "abc1234"
+}
+.fi
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 2
+Execution error
+.SH SEE ALSO
+.BR forgekit (1)
+.SH AUTHOR
+ForgeKit Contributors <forgekit@demetrius-ch.github.io>

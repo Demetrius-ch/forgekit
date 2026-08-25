@@ -1,0 +1,86 @@
+.TH FORGEKIT-DOCTOR 1 "2026-08-25" "ForgeKit 0.3.4" "User Commands"
+.SH NAME
+forgekit-doctor \- Diagnose the development environment and project health
+.SH SYNOPSIS
+.B forgekit doctor
+[\fIoptions\fR]
+.SH DESCRIPTION
+Check the development environment and project health. Validates ForgeKit
+version, project signature, installed features, Go/Git/Docker availability,
+PostgreSQL configuration, project structure, architecture rules, security,
+dependencies, and documentation.
+.SH OPTIONS
+.TP
+.B \-\-ci
+CI/CD mode: non-interactive, deterministic, exit codes 0/1/2, no spinners
+.TP
+.B \-h, \-\-help
+Show help
+.SH GLOBAL OPTIONS
+.TP
+.B \-\-debug
+Enable debug output
+.TP
+.B \-\-format \fIformat\fR
+Output format: human, json (default: human)
+.TP
+.B \-\-quiet
+Reduce output (except errors and JSON)
+.SH EXAMPLES
+.TP
+Run doctor check:
+.B forgekit doctor
+.TP
+Run in CI mode:
+.B forgekit doctor --ci
+.TP
+Run with JSON output:
+.B forgekit doctor --format json
+.SH CHECKS PERFORMED
+.TP
+.B ForgeKit Version
+Current version and update availability
+.TP
+.B Project Signature
+.forge/forge.yaml and .forge/features.yaml validation
+.TP
+.B Installed Features
+Feature versions vs registry
+.TP
+.B Environment
+Go, Git, Docker availability
+.TP
+.B PostgreSQL
+Configuration and connectivity
+.TP
+.B Project Structure
+go.mod, .env, docker-compose.yml presence
+.TP
+.B Architecture Rules
+Security, dependencies, documentation
+.SH EXIT STATUS
+.TP
+.B 0
+All checks passed
+.TP
+.B 1
+Warnings or errors found
+.TP
+.B 2
+Execution error
+.SH FILES
+.TP
+.I ./forge.yaml
+Project configuration
+.TP
+.I ./.forge/features.yaml
+Installed features
+.TP
+.I .env.example
+Environment template
+.SH SEE ALSO
+.BR forgekit (1),
+.BR forgekit-analyze (1),
+.BR forgekit-check (1)
+.SH AUTHOR
+ForgeKit Contributors <forgekit@demetrius-ch.github.io>

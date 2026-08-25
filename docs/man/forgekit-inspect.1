@@ -1,0 +1,68 @@
+.TH FORGEKIT-INSPECT 1 "2026-08-25" "ForgeKit 0.3.4" "User Commands"
+.SH NAME
+forgekit-inspect \- Inspect the ForgeKit project signature
+.SH SYNOPSIS
+.B forgekit inspect
+[\fIoptions\fR]
+.SH DESCRIPTION
+Inspect a ForgeKit project's signature and metadata. Displays project
+information, installed features, schema version, and validation status.
+.SH OPTIONS
+.TP
+.B \-h, \-\-help
+Show help
+.SH GLOBAL OPTIONS
+.TP
+.B \-\-debug
+Enable debug output
+.TP
+.B \-\-format \fIformat\fR
+Output format: human, json (default: human)
+.TP
+.B \-\-quiet
+Reduce output (except errors and JSON)
+.SH EXAMPLES
+.TP
+Inspect current project:
+.B forgekit inspect
+.TP
+Inspect with JSON output:
+.B forgekit inspect --format json
+.SH INFORMATION DISPLAYED
+.TP
+.B Project Name
+Name from forge.yaml
+.TP
+.B Project Type
+ForgeKit, legacy, external compatible, or invalid
+.TP
+.B Schema Version
+ForgeKit schema version
+.TP
+.B Installed Features
+List of features with versions and timestamps
+.TP
+.B Signature Status
+Valid, legacy, absent, or invalid
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+Project not found or not a ForgeKit project
+.TP
+.B 2
+Execution error
+.SH FILES
+.TP
+.I ./forge.yaml
+Project metadata
+.TP
+.I ./.forge/features.yaml
+Installed features with versions
+.SH SEE ALSO
+.BR forgekit (1),
+.BR forgekit-doctor (1)
+.SH AUTHOR
+ForgeKit Contributors <forgekit@demetrius-ch.github.io>

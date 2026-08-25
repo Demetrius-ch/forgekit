@@ -97,8 +97,48 @@ nfpms:
         type: file
         file_info:
           mode: 0644
-      - src: debian/manpages/forgekit.1.gz
+      - src: docs/man/forgekit.1.gz
         dst: /usr/share/man/man1/forgekit.1.gz
+        type: file
+        file_info:
+          mode: 0644
+      - src: docs/man/forgekit-init.1.gz
+        dst: /usr/share/man/man1/forgekit-init.1.gz
+        type: file
+        file_info:
+          mode: 0644
+      - src: docs/man/forgekit-add.1.gz
+        dst: /usr/share/man/man1/forgekit-add.1.gz
+        type: file
+        file_info:
+          mode: 0644
+      - src: docs/man/forgekit-remove.1.gz
+        dst: /usr/share/man/man1/forgekit-remove.1.gz
+        type: file
+        file_info:
+          mode: 0644
+      - src: docs/man/forgekit-analyze.1.gz
+        dst: /usr/share/man/man1/forgekit-analyze.1.gz
+        type: file
+        file_info:
+          mode: 0644
+      - src: docs/man/forgekit-check.1.gz
+        dst: /usr/share/man/man1/forgekit-check.1.gz
+        type: file
+        file_info:
+          mode: 0644
+      - src: docs/man/forgekit-doctor.1.gz
+        dst: /usr/share/man/man1/forgekit-doctor.1.gz
+        type: file
+        file_info:
+          mode: 0644
+      - src: docs/man/forgekit-inspect.1.gz
+        dst: /usr/share/man/man1/forgekit-inspect.1.gz
+        type: file
+        file_info:
+          mode: 0644
+      - src: docs/man/forgekit-version.1.gz
+        dst: /usr/share/man/man1/forgekit-version.1.gz
         type: file
         file_info:
           mode: 0644
