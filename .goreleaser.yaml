@@ -97,6 +97,11 @@ nfpms:
         type: file
         file_info:
           mode: 0644
+      - src: debian/manpages/forgekit.1.gz
+        dst: /usr/share/man/man1/forgekit.1.gz
+        type: file
+        file_info:
+          mode: 0644
 
 # Release configuration
 release:
