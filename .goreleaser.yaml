@@ -62,7 +62,7 @@ nfpms:
       - ca-certificates
     recommends:
       - docker.io
-      - docker-compose
+      - docker-compose-v2
     section: devel
     priority: optional
     epoch: "0"
