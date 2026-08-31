@@ -1,4 +1,4 @@
-forgekit (0.3.1-1) unstable; urgency=medium
+forgekit (0.3.4-1) unstable; urgency=medium
 
   * Initial release of ForgeKit as Debian package
   * Go CLI for generating, managing, analyzing and diagnosing backend APIs
@@ -7,4 +7,4 @@ forgekit (0.3.1-1) unstable; urgency=medium
   * Architecture validation: doctor, check, analyze, inspect
   * Provides backward-compatible 'forge' symlink
 
- -- ForgeKit Maintainers <forgekit@demetrius-ch.github.io>  Tue, 25 Aug 2026 12:00:00 +0200
+ -- ForgeKit Maintainers <lgdemetrius@gmail.com>  Tue, 25 Aug 2026 12:00:00 +0200

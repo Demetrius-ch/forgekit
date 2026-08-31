@@ -1,14 +1,20 @@
 #!/usr/bin/make -f
 
+export DH_GOLANG_EXCLUDES = /etc/Proton
+
+UPSTREAM_VERSION := $(shell dpkg-parsechangelog -SVersion | cut -d- -f1)
+
 %:
 	dh $@ --buildsystem=golang --with=golang
 
 override_dh_auto_build:
-	CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/Demetrius-ch/forgekit/internal/app.Version=$(DEB_VERSION_UPSTREAM)" -o forgekit ./cmd/forge
+	CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/Demetrius-ch/forgekit/internal/app.Version=$(UPSTREAM_VERSION)" -o forgekit ./cmd/forge
+
+override_dh_auto_test:
+	go test -vet=off ./...
 
 override_dh_auto_install:
-	dh_auto_install
-	# Install forgekit binary
+	# Install only the binary, not the source code
 	install -D -m 755 forgekit debian/forgekit/usr/bin/forgekit
 	# Create forge symlink for backward compatibility
 	ln -sf forgekit debian/forgekit/usr/bin/forge
@@ -26,6 +32,9 @@ override_dh_auto_install:
 	install -D -m 644 docs/man/forgekit-doctor.1.gz debian/forgekit/usr/share/man/man1/forgekit-doctor.1.gz
 	install -D -m 644 docs/man/forgekit-inspect.1.gz debian/forgekit/usr/share/man/man1/forgekit-inspect.1.gz
 	install -D -m 644 docs/man/forgekit-version.1.gz debian/forgekit/usr/share/man/man1/forgekit-version.1.gz
+
+override_dh_golang:
+	# Disable dh_golang - static binary, no Go deps to track
 
 override_dh_installchangelogs:
 	dh_installchangelogs debian/changelog

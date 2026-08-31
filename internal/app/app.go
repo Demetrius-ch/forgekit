@@ -1,6 +1,6 @@
 package app
 
 var (
-	Name    = "forge"
-	Version = "0.2.0"
+	Name    = "forgekit"
+	Version = "0.3.4"
 )

@@ -20,7 +20,7 @@ description: |
 
 version: '0.3.4'
 grade: stable
-confinement: classic
+confinement: strict
 base: core22
 
 contact: forgekit@demetrius-ch.github.io
@@ -47,15 +47,14 @@ apps:
 
 parts:
   forgekit:
-    plugin: nil
-    source: ..
+    plugin: dump
+    source: /run/media/demetrius/Demetrius/ForgeKit
+    organize:
+      'forgekit': 'bin/forgekit'
+    prime:
+      - bin/forgekit
     build-packages:
-      - golang-go
-      - git
       - ca-certificates
     override-build: |
-      # Build the binary with CGO_ENABLED=0 from the source root (where go.mod is)
-      cd $CRAFT_PART_SRC
       CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/Demetrius-ch/forgekit/internal/app.Version=$SNAPCRAFT_PROJECT_VERSION" -o $CRAFT_PART_INSTALL/bin/forgekit ./cmd/forge
-      # Create forge symlink for backward compatibility
       ln -sf forgekit $CRAFT_PART_INSTALL/bin/forge

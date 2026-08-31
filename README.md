@@ -20,6 +20,10 @@
 
 ForgeKit is a developer CLI written in Go that helps you bootstrap backend REST APIs without manually creating the same project structure, configuration, database integration, Docker files, migrations, and tests every time.
 
+> **⚠️ En développement actif** — ForgeKit est en version 0.x (pré-1.0). L'API et les fonctionnalités peuvent évoluer. Les retours et contributions sont les bienvenus !
+
+> **🟢 Open Source** — ForgeKit est développé ouvertement sur GitHub. Toute contribution (code, documentation, tests, signalement de bugs, idées) est la bienvenue. Consultez [CONTRIBUTING.md](CONTRIBUTING.md) pour commencer.
+
 The goal is simple:
 
 ```text
@@ -90,6 +94,8 @@ sudo rm /etc/apt/sources.list.d/forgekit.sources /usr/share/keyrings/forgekit-ar
 sudo apt update
 ```
 
+**Also available in Linux app centers** — The APT package includes AppStream metadata and icon, so ForgeKit appears in GNOME Software, KDE Discover, and other software centers after adding the repository.
+
 ### Linux (Debian/Ubuntu) — Manual `.deb` download
 
 Download the latest `.deb` package from [GitHub Releases](https://github.com/Demetrius-ch/forgekit/releases):
@@ -106,6 +112,30 @@ Uninstall:
 
 ```bash
 sudo apt remove forgekit
+```
+
+### Linux — Snap Store
+
+Install ForgeKit from the Snap Store (works on any snapd-supported distribution):
+
+```bash
+sudo snap install forgekit
+```
+
+Verify installation:
+
+```bash
+forgekit version
+```
+
+The snap provides both `forgekit` and `forge` (alias) commands.
+
+**Also available in Linux app centers** — Once installed via Snap, ForgeKit appears in GNOME Software, KDE Discover, and other AppStream-compatible software centers with its icon and description.
+
+Uninstall:
+
+```bash
+sudo snap remove forgekit
 ```
 
 ### From source
