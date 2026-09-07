@@ -18,6 +18,8 @@ dist/
 # Documentation files (generated or local)
 explication.md
 projects.md
+DEBIAN_READINESS_REPORT.md
+AGENTS.md
 
 # Environment
 .env

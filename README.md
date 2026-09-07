@@ -20,9 +20,9 @@
 
 ForgeKit is a developer CLI written in Go that helps you bootstrap backend REST APIs without manually creating the same project structure, configuration, database integration, Docker files, migrations, and tests every time.
 
-> **⚠️ En développement actif** — ForgeKit est en version 0.x (pré-1.0). L'API et les fonctionnalités peuvent évoluer. Les retours et contributions sont les bienvenus !
+> ** En développement actif** — ForgeKit est en version 0.x (pré-1.0). L'API et les fonctionnalités peuvent évoluer. Les retours et contributions sont les bienvenus !
 
-> **🟢 Open Source** — ForgeKit est développé ouvertement sur GitHub. Toute contribution (code, documentation, tests, signalement de bugs, idées) est la bienvenue. Consultez [CONTRIBUTING.md](CONTRIBUTING.md) pour commencer.
+> ** Open Source** — ForgeKit est développé ouvertement sur GitHub. Toute contribution (code, documentation, tests, signalement de bugs, idées) est la bienvenue. Consultez [CONTRIBUTING.md](CONTRIBUTING.md) pour commencer.
 
 The goal is simple:
 
@@ -903,8 +903,8 @@ The generated project belongs to the developer. ForgeKit does not create a propr
 - [x] Idempotent feature installation
 - [x] Dry-run support
 - [x] JSON/quiet output modes
-- [ ] Redis integration
-- [ ] Swagger/OpenAPI generation
+- [x] Redis integration
+- [x] Swagger/OpenAPI generation
 - [ ] Additional database options
 - [ ] More project templates
 - [ ] Better project analysis

@@ -6,7 +6,7 @@ Merci de votre intérêt pour contribuer à ForgeKit !
 
 ```bash
 # Fork & clone
-git clone https://github.com/VOTRE_USERNAME/forgekit.git
+git clone https://github.com/Demetrius-ch/forgekit.git
 cd forgekit
 
 # Installer les dépendances
@@ -104,7 +104,6 @@ vsce package
 ## Documentation
 
 - `README.md` : Vue d'ensemble projet
-- `AGENTS.md` : Instructions pour agents IA
 - Commentaires de code : GoDoc sur fonctions publiques
 
 ## Signaler un bug
