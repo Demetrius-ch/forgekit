@@ -59,7 +59,7 @@ jobs:
           CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/Demetrius-ch/forgekit/internal/app.Version=${{ steps.get_tag.outputs.tag }}" -o forgekit ./cmd/forge
 
       - name: Install Snapcraft
-        uses: snapcraft/action-build@v1
+        uses: snapcraft/action-build@v2
 
       - name: Build Snap
         working-directory: ./snap
