@@ -73,7 +73,9 @@ jobs:
 
       - name: Copy GPG public key to repo structure
         run: |
-          cp ${{ github.workspace }}/apt/gpg/forgekit-archive-keyring.gpg apt/gpg/forgekit-archive-keyring.gpg
+          cp ${{ github.workspace }}/apt/gpg/forgekit-archive-keyring.gpg apt/gpg/forgekit-archive-keyring.gpg 2>/dev/null || true
+          # Also copy to apt root for deployment
+          cp ${{ github.workspace }}/apt/gpg/forgekit-archive-keyring.gpg apt/forgekit-archive-keyring.gpg
 
       - name: Copy .deb to pool
         run: |
@@ -110,10 +112,6 @@ jobs:
           rm -f InRelease
           gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --clearsign -o InRelease Release
 
-      - name: Copy public key to apt root for deployment
-        run: |
-          cp apt/gpg/forgekit-archive-keyring.gpg apt/forgekit-archive-keyring.gpg
-
       - name: Validate APT repository
         run: |
           test -f apt/dists/stable/Release
@@ -121,6 +119,7 @@ jobs:
           test -f apt/dists/stable/main/binary-amd64/Packages
           test -f apt/dists/stable/main/binary-amd64/Packages.gz
           grep -q "forgekit_" apt/dists/stable/main/binary-amd64/Packages
+          test -f apt/forgekit-archive-keyring.gpg
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
