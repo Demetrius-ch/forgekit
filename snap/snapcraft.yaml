@@ -48,8 +48,8 @@ apps:
 parts:
   forgekit:
     plugin: dump
-    source: .
-    source-type: git
+    source: ..
+    source-type: local
     organize:
       'forgekit': 'bin/forgekit'
     prime:
