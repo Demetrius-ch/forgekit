@@ -69,6 +69,7 @@ jobs:
           snapcraft pack --destructive-mode
 
       - name: Verify Snap
+        working-directory: ./snap
         run: |
           ls -lh *.snap
           unsquashfs -l *.snap | head -20
@@ -77,13 +78,13 @@ jobs:
         if: github.event_name == 'release' && github.event.release.prerelease == false
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        working-directory: ./snap
         run: |
           snapcraft upload --release=stable *.snap
-        working-directory: ./snap
 
       - name: Upload Snap artifact
         uses: actions/upload-artifact@v4
         with:
           name: forgekit-snap
-          path: '*.snap'
+          path: snap/*.snap
           retention-days: 30
