@@ -68,7 +68,7 @@ jobs:
       - name: Build Snap
         working-directory: ./snap
         run: |
-          snapcraft --use-lxd
+          snapcraft pack --destructive-mode
 
       - name: Verify Snap
         run: |
