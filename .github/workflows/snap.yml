@@ -61,9 +61,7 @@ jobs:
       - name: Install Snapcraft
         run: |
           sudo snap install snapcraft --classic
-          sudo snap install lxd
-          sudo lxd init --auto
-          # No need for newgrp in GitHub Actions - snapcraft uses the current user's groups
+          sudo snap install core22
 
       - name: Build Snap
         working-directory: ./snap
