@@ -37,7 +37,7 @@ jobs:
           ./forgekit.exe version
           ./forgekit.exe --help
 
-      - name: Cross-compile Windows amd64
+      - name: Cross-compile Windows amd64 (verify execution)
         run: |
           $env:GOOS="windows"
           $env:GOARCH="amd64"
@@ -45,13 +45,12 @@ jobs:
           go build -o forgekit-windows-amd64.exe ./cmd/forge
           ./forgekit-windows-amd64.exe version
 
-      - name: Cross-compile Windows arm64
+      - name: Cross-compile Windows arm64 (build only, no execution on x64 runner)
         run: |
           $env:GOOS="windows"
           $env:GOARCH="arm64"
           $env:CGO_ENABLED="0"
           go build -o forgekit-windows-arm64.exe ./cmd/forge
-          ./forgekit-windows-arm64.exe version
 
       - name: Integration test (scaffolding only, no Docker)
         run: |
