@@ -62,9 +62,11 @@ and get a structured Go backend ready for development.
 
 ## Installation
 
-### Linux (Debian/Ubuntu) — Recommended (APT)
+### Linux (Debian/Ubuntu) — APT Repository (External)
 
-Install ForgeKit from the official APT repository:
+> **Note**: ForgeKit is not yet in the official Debian/Ubuntu repositories. The APT repository below is maintained by the ForgeKit project.
+
+Install ForgeKit from the project's APT repository:
 
 ```bash
 # 1. Add the ForgeKit GPG key (Deb822 format)
@@ -95,6 +97,8 @@ sudo apt update
 ```
 
 **Also available in Linux app centers** — The APT package includes AppStream metadata and icon, so ForgeKit appears in GNOME Software, KDE Discover, and other software centers after adding the repository.
+
+**Debian packaging status**: Debian packaging is prepared and awaiting sponsorship for inclusion in official repositories.
 
 ### Linux (Debian/Ubuntu) — Manual `.deb` download
 
@@ -190,6 +194,27 @@ Verify checksums (SHA256):
 wget https://github.com/Demetrius-ch/forgekit/releases/download/v${VERSION}/checksums.txt
 sha256sum -c checksums.txt
 ```
+
+### Windows
+
+Download the Windows archive from [GitHub Releases](https://github.com/Demetrius-ch/forgekit/releases):
+
+- **Windows x86_64**: `forgekit_<version>_Windows_x86_64.zip`
+- **Windows ARM64**: `forgekit_<version>_Windows_arm64.zip`
+
+Extract the archive, place `forgekit.exe` in a folder of your choice, and add that folder to your **PATH** (User or System environment variable).
+
+Open a **new** PowerShell or CMD and verify:
+
+```powershell
+forgekit version
+forgekit doctor
+forgekit init my-api
+```
+
+> **Note**: ForgeKit is a standalone binary — **Go is not required** to run ForgeKit itself. Go is only needed for `forge init` (to run `go mod tidy` and tests on the generated project), `forge add/remove`, and `forge doctor` (to check Go version).
+
+See [docs/install-windows.md](docs/install-windows.md) for detailed installation instructions, prerequisites, and troubleshooting.
 
 ---
 

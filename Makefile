@@ -40,6 +40,15 @@ build-linux:
 	@echo "Built: forge-linux-amd64"
 	@file forge-linux-amd64
 
+# Build static Windows binaries (cross-compilation)
+build-windows:
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o forgekit-windows-amd64.exe ./cmd/forge
+	@echo "Built: forgekit-windows-amd64.exe"
+	@file forgekit-windows-amd64.exe
+	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -o forgekit-windows-arm64.exe ./cmd/forge
+	@echo "Built: forgekit-windows-arm64.exe"
+	@file forgekit-windows-arm64.exe
+
 # Build release artifacts with GoReleaser (snapshot mode)
 package:
 	goreleaser release --snapshot --clean

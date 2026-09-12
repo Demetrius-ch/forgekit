@@ -1,0 +1,110 @@
+# .github/workflows/windows.yml - ForgeKit Windows CI Workflow
+# Runs on push/PR to main/master, builds and tests Windows binaries
+
+name: Windows CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: false
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build (native Windows)
+        run: go build -o forgekit.exe ./cmd/forge
+
+      - name: Verify binary
+        run: |
+          ./forgekit.exe version
+          ./forgekit.exe --help
+
+      - name: Cross-compile Windows amd64
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o forgekit-windows-amd64.exe ./cmd/forge
+          ./forgekit-windows-amd64.exe version
+
+      - name: Cross-compile Windows arm64
+        run: |
+          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -o forgekit-windows-arm64.exe ./cmd/forge
+          ./forgekit-windows-arm64.exe version
+
+      - name: Integration test (scaffolding only, no Docker)
+        run: |
+          ./forgekit.exe init test-api --non-interactive --module github.com/forgekit/test-api --skip-postprocess
+          ls test-api
+          test-path test-api/go.mod
+          test-path test-api/cmd/server/main.go
+          test-path test-api/internal/transport/http/router.go
+          test-path test-api/.env.example
+          test-path test-api/forge.yaml
+          test-path test-api/.gitignore
+          test-path test-api/README.md
+          test-path test-api/docker/docker-compose.yml
+          test-path test-api/docker/Dockerfile
+
+      - name: Test doctor command
+        run: |
+          cd test-api
+          ..\forgekit.exe doctor
+
+      - name: Upload Windows binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: forgekit-windows-binaries
+          path: |
+            forgekit.exe
+            forgekit-windows-amd64.exe
+            forgekit-windows-arm64.exe
+          retention-days: 7
+
+  goreleaser-snapshot:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+          cache: false
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Set up GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: forgekit-windows-release
+          path: dist/forgekit_*_Windows_*.zip
+          retention-days: 7
