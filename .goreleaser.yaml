@@ -11,6 +11,7 @@ builds:
     binary: forgekit
     goos:
       - linux
+      - windows
     goarch:
       - amd64
       - arm64
@@ -29,6 +30,7 @@ archives:
       - forgekit
     formats:
       - tar.gz
+      - zip
     name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}_{{.Arch}}"
 
 # Checksums
