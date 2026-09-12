@@ -48,7 +48,8 @@ apps:
 parts:
   forgekit:
     plugin: dump
-    source: /run/media/demetrius/Demetrius/ForgeKit
+    source: .
+    source-type: git
     organize:
       'forgekit': 'bin/forgekit'
     prime:
