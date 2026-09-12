@@ -71,6 +71,10 @@ jobs:
           mkdir -p apt/dists/stable/main/binary-amd64
           mkdir -p apt/gpg
 
+      - name: Copy GPG public key to repo structure
+        run: |
+          cp ${{ github.workspace }}/apt/gpg/forgekit-archive-keyring.gpg apt/gpg/forgekit-archive-keyring.gpg
+
       - name: Copy .deb to pool
         run: |
           cp artifacts/forgekit_*_linux_amd64.deb apt/pool/main/f/forgekit/forgekit_${{ steps.get_tag.outputs.tag }}_amd64.deb
