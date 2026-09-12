@@ -60,14 +60,10 @@ jobs:
 
       - name: Install Snapcraft
         run: |
-          sudo apt-get update
-          sudo apt-get install -y snapcraft lxd
+          sudo snap install snapcraft --classic
           sudo snap install lxd
           sudo lxd init --auto
-          sudo usermod -a -G lxd $USER
-          newgrp lxd << 'EOF'
-          snapcraft --use-lxd
-          EOF
+          # No need for newgrp in GitHub Actions - snapcraft uses the current user's groups
 
       - name: Build Snap
         working-directory: ./snap
