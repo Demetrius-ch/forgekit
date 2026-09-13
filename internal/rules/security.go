@@ -192,26 +192,46 @@ func (GracefulShutdownRule) Severity() report.Severity {
 }
 
 func (GracefulShutdownRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	// Check Go graceful shutdown
 	mainPath := filepath.Join(rctx.ProjectRoot, "cmd", "server", "main.go")
 	data, err := os.ReadFile(mainPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
+	if err == nil {
+		content := string(data)
+		if strings.Contains(content, "signal.Notify") && strings.Contains(content, "Shutdown") {
+			return []report.Finding{{
+				ID: "project.shutdown", Category: "pass", Severity: report.SeverityInfo,
+				Message: "Arrêt gracieux configuré",
+			}}, nil
 		}
-		return nil, err
-	}
-	content := string(data)
-	if strings.Contains(content, "signal.Notify") && strings.Contains(content, "Shutdown") {
 		return []report.Finding{{
-			ID: "project.shutdown", Category: "pass", Severity: report.SeverityInfo,
-			Message: "Arrêt gracieux configuré",
+			ID: "project.shutdown", Category: "project", Severity: report.SeverityWarning,
+			File: filepath.Join("cmd", "server", "main.go"), Message: "Aucun shutdown gracieux détecté",
+			Suggestion: "Ajoutez signal.Notify et un appel à server.Shutdown()",
 		}}, nil
 	}
-	return []report.Finding{{
-		ID: "project.shutdown", Category: "project", Severity: report.SeverityWarning,
-		File: filepath.Join("cmd", "server", "main.go"), Message: "Aucun shutdown gracieux détecté",
-		Suggestion: "Ajoutez signal.Notify et un appel à server.Shutdown()",
-	}}, nil
+
+	// Check Python graceful shutdown
+	pythonMainPath := filepath.Join(rctx.ProjectRoot, "main.py")
+	pythonData, err := os.ReadFile(pythonMainPath)
+	if err == nil {
+		content := string(pythonData)
+		if strings.Contains(content, "signal") && strings.Contains(content, "SIGTERM") {
+			return []report.Finding{{
+				ID: "project.shutdown", Category: "pass", Severity: report.SeverityInfo,
+				Message: "Arrêt gracieux configuré",
+			}}, nil
+		}
+		// FastAPI with uvicorn handles graceful shutdown automatically
+		if strings.Contains(content, "uvicorn") {
+			return []report.Finding{{
+				ID: "project.shutdown", Category: "pass", Severity: report.SeverityInfo,
+				Message: "Arrêt gracieux géré par uvicorn",
+			}}, nil
+		}
+	}
+
+	// No main.go or main.py found, skip
+	return nil, nil
 }
 
 type SecuritySQLInjectionRule struct{}

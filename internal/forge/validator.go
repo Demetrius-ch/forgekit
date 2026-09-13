@@ -115,9 +115,13 @@ func ValidateSignature(projectRoot string) ValidationResult {
 	}
 
 	for _, feat := range features.Features {
-		featurePath := filepath.Join(projectRoot, "internal", feat.Name)
-		if _, err := os.Stat(featurePath); os.IsNotExist(err) {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("feature %q declared but configuration missing (expected at %s)", feat.Name, featurePath))
+		// Check both Go-style (internal/) and Python-style (root-level) paths
+		goPath := filepath.Join(projectRoot, "internal", feat.Name)
+		pythonPath := filepath.Join(projectRoot, feat.Name)
+		if _, err := os.Stat(goPath); os.IsNotExist(err) {
+			if _, err := os.Stat(pythonPath); os.IsNotExist(err) {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("feature %q declared but configuration missing (expected at %s or %s)", feat.Name, goPath, pythonPath))
+			}
 		}
 	}
 

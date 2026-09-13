@@ -1,0 +1,9 @@
+import { HealthRepository, HealthStatus } from '../domain/health.entity';
+
+export class HealthUseCase {
+  constructor(private readonly healthRepository: HealthRepository) {}
+
+  async check(): Promise<HealthStatus> {
+    return this.healthRepository.check();
+  }
+}

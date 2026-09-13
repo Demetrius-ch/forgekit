@@ -1,0 +1,8 @@
+package services
+
+import "{{ .ModulePath }}/internal/models"
+
+// Health provides the health service operation.
+func Health() models.Health {
+	return models.Health{Status: "ok"}
+}

@@ -3,10 +3,12 @@ package forge
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Demetrius-ch/forgekit/internal/feature"
+	"github.com/Demetrius-ch/forgekit/internal/projectconfig"
 )
 
 func createTestProject(t *testing.T) string {
@@ -41,6 +43,34 @@ func TestCreateInitialMetadata(t *testing.T) {
 	}
 	if meta.CreatedAt.IsZero() {
 		t.Fatal("created_at should not be zero")
+	}
+	if meta.Configuration == nil {
+		t.Fatal("configuration should be recorded")
+	}
+	if meta.Configuration.Architecture != projectconfig.ArchitectureHexagonal {
+		t.Fatalf("expected hexagonal default, got %q", meta.Configuration.Architecture)
+	}
+}
+
+func TestCreateInitialMetadataWithConfig(t *testing.T) {
+	config := projectconfig.ProjectConfig{
+		Name:           "clean-api",
+		ModulePath:     "github.com/test/clean-api",
+		Architecture:   projectconfig.ArchitectureClean,
+		Database:       projectconfig.DatabaseSQLite,
+		Docker:         false,
+		Authentication: projectconfig.AuthenticationJWT,
+		Documentation:  projectconfig.DocumentationSwagger,
+		Tests:          projectconfig.TestStrategyUnitIntegration,
+		CI:             projectconfig.CIStrategyGitHub,
+	}
+
+	meta := CreateInitialMetadataWithConfig("/tmp/test", "1.26", config)
+	if meta.Configuration == nil {
+		t.Fatal("configuration should be recorded")
+	}
+	if *meta.Configuration != config {
+		t.Fatalf("configuration mismatch: got %#v, want %#v", *meta.Configuration, config)
 	}
 }
 
@@ -311,7 +341,7 @@ func TestValidateSignature_WarningForMissingFeatureConfig(t *testing.T) {
 	}
 	found := false
 	for _, w := range result.Warnings {
-		if w == "feature \"auth\" declared but configuration missing (expected at "+filepath.Join(root, "internal", "auth")+")" {
+		if strings.Contains(w, "feature \"auth\" declared but configuration missing") {
 			found = true
 			break
 		}

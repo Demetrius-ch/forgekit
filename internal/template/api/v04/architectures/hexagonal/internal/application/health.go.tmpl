@@ -1,0 +1,8 @@
+package application
+
+import "{{ .ModulePath }}/internal/domain"
+
+// Health returns the service health without depending on transport or infrastructure.
+func Health() domain.Health {
+	return domain.Health{Status: "ok"}
+}

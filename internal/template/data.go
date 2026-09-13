@@ -1,5 +1,7 @@
 package template
 
+import "github.com/Demetrius-ch/forgekit/internal/projectconfig"
+
 // Data is passed to text/template when rendering scaffold files.
 type Data struct {
 	ProjectName        string
@@ -7,6 +9,7 @@ type Data struct {
 	PackageName        string
 	HTTPPort           int
 	PostgresHostPort   int
+	DBHostPort         int
 	DatabaseName       string
 	GoVersion          string
 	Author             string
@@ -16,6 +19,7 @@ type Data struct {
 	ExternalDBUser     string
 	ExternalDBPassword string
 	ExternalDBName     string
+	ProjectConfig      projectconfig.ProjectConfig
 }
 
 // Aliases exposes {{PROJECT_NAME}} style access inside templates.
@@ -25,6 +29,7 @@ func (d Data) DATABASE() string             { return d.DatabaseName }
 func (d Data) AUTHOR() string               { return d.Author }
 func (d Data) HTTP_PORT() int               { return d.HTTPPort }
 func (d Data) POSTGRES_HOST_PORT() int      { return d.PostgresHostPort }
+func (d Data) DB_HOST_PORT() int            { return d.DBHostPort }
 func (d Data) GO_VERSION() string           { return d.GoVersion }
 func (d Data) USE_EXISTING_DB() bool        { return d.UseExistingDB }
 func (d Data) EXTERNAL_DB_HOST() string     { return d.ExternalDBHost }

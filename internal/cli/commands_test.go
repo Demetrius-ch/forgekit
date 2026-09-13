@@ -13,6 +13,7 @@ import (
 
 	"github.com/Demetrius-ch/forgekit/internal/config"
 	"github.com/Demetrius-ch/forgekit/internal/output"
+	"github.com/Demetrius-ch/forgekit/internal/projectconfig"
 	"github.com/Demetrius-ch/forgekit/internal/report"
 	"github.com/Demetrius-ch/forgekit/internal/rules"
 )
@@ -257,15 +258,15 @@ func TestSubcommandHelpNoBranding(t *testing.T) {
 
 func TestSelectPorts_HTTPPortAvailable(t *testing.T) {
 	g := &globalFlags{Format: output.FormatHuman, Quiet: true}
-	sel, err := selectPorts(g, 9999, 9998, false)
+	sel, err := selectPorts(g, 9999, 9998, false, projectconfig.DatabasePostgres)
 	if err != nil {
 		t.Fatalf("selectPorts error: %v", err)
 	}
 	if sel.HTTPPort != 9999 {
 		t.Errorf("expected HTTP port 9999, got %d", sel.HTTPPort)
 	}
-	if sel.PostgresHostPort != 9998 {
-		t.Errorf("expected Postgres port 9998, got %d", sel.PostgresHostPort)
+	if sel.DBHostPort != 9998 {
+		t.Errorf("expected DB port 9998, got %d", sel.DBHostPort)
 	}
 }
 
@@ -274,15 +275,15 @@ func TestSelectPorts_HTTPPortOccupied(t *testing.T) {
 	// This test just verifies the function exists and compiles
 	g := &globalFlags{Format: output.FormatHuman, Quiet: true}
 	// Use a port that's likely available
-	sel, err := selectPorts(g, 18080, 15432, false)
+	sel, err := selectPorts(g, 18080, 15432, false, projectconfig.DatabasePostgres)
 	if err != nil {
 		t.Fatalf("selectPorts error: %v", err)
 	}
 	if sel.HTTPPort != 18080 {
 		t.Errorf("expected HTTP port 18080, got %d", sel.HTTPPort)
 	}
-	if sel.PostgresHostPort != 15432 {
-		t.Errorf("expected Postgres port 15432, got %d", sel.PostgresHostPort)
+	if sel.DBHostPort != 15432 {
+		t.Errorf("expected DB port 15432, got %d", sel.DBHostPort)
 	}
 }
 
@@ -290,7 +291,7 @@ func TestSelectPorts_DryRun(t *testing.T) {
 	g := &globalFlags{Format: output.FormatHuman, Quiet: true}
 	// Use mock to test dry-run output without affecting real ports
 	// We can't inject mock into selectPorts easily, so just test it doesn't crash
-	sel, err := selectPorts(g, 18080, 15432, true)
+	sel, err := selectPorts(g, 18080, 15432, true, projectconfig.DatabasePostgres)
 	if err != nil {
 		t.Fatalf("selectPorts error: %v", err)
 	}

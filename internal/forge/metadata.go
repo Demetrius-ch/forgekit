@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Demetrius-ch/forgekit/internal/app"
+	"github.com/Demetrius-ch/forgekit/internal/projectconfig"
 
 	"gopkg.in/yaml.v3"
 )
@@ -19,12 +20,13 @@ const (
 )
 
 type ForgeMetadata struct {
-	Version   string    `yaml:"version"`
-	Schema    int       `yaml:"schema"`
-	Project   string    `yaml:"project,omitempty"`
-	Language  string    `yaml:"language,omitempty"`
-	Type      string    `yaml:"type,omitempty"`
-	CreatedAt time.Time `yaml:"created_at,omitempty"`
+	Version       string                       `yaml:"version"`
+	Schema        int                          `yaml:"schema"`
+	Project       string                       `yaml:"project,omitempty"`
+	Language      string                       `yaml:"language,omitempty"`
+	Type          string                       `yaml:"type,omitempty"`
+	CreatedAt     time.Time                    `yaml:"created_at,omitempty"`
+	Configuration *projectconfig.ProjectConfig `yaml:"configuration,omitempty"`
 }
 
 func MetadataPath(projectRoot string) string {
@@ -72,13 +74,21 @@ func SaveMetadata(projectRoot string, meta ForgeMetadata) error {
 }
 
 func CreateInitialMetadata(projectRoot, projectName, modulePath, goVersion string) ForgeMetadata {
+	return CreateInitialMetadataWithConfig(projectRoot, goVersion, projectconfig.Default(projectName, modulePath))
+}
+
+// CreateInitialMetadataWithConfig records the selected v0.6 configuration in
+// the existing ForgeKit metadata file. Older metadata remains valid because
+// configuration was optional before v0.4.
+func CreateInitialMetadataWithConfig(projectRoot, goVersion string, configuration projectconfig.ProjectConfig) ForgeMetadata {
 	return ForgeMetadata{
-		Version:   app.Version,
-		Schema:    SchemaVersion,
-		Project:   projectName,
-		Language:  "go",
-		Type:      "backend-api",
-		CreatedAt: time.Now().UTC(),
+		Version:       app.Version,
+		Schema:        SchemaVersion,
+		Project:       configuration.Name,
+		Language:      string(configuration.Language),
+		Type:          "backend-api",
+		CreatedAt:     time.Now().UTC(),
+		Configuration: &configuration,
 	}
 }
 

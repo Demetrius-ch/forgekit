@@ -1,0 +1,8 @@
+export class HealthEntity {
+  static check() {
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    };
+  }
+}

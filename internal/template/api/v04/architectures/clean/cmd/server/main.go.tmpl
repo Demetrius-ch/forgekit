@@ -1,0 +1,69 @@
+package main
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"{{ .ModulePath }}/internal/infrastructure/config"
+{{- if eq .ProjectConfig.Database "postgres" }}
+	"{{ .ModulePath }}/internal/infrastructure/postgres"
+{{- else if eq .ProjectConfig.Database "mysql" }}
+	"{{ .ModulePath }}/internal/infrastructure/mysql"
+{{- else if eq .ProjectConfig.Database "sqlite" }}
+	"{{ .ModulePath }}/internal/infrastructure/sqlite"
+{{- end }}
+	transport "{{ .ModulePath }}/internal/interfaces/http"
+)
+
+func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Error("invalid configuration", "error", err)
+		return
+	}
+{{- if eq .ProjectConfig.Database "postgres" }}
+	database, err := postgres.Open(cfg.DatabaseURL)
+{{- else if eq .ProjectConfig.Database "mysql" }}
+	database, err := mysql.Open(cfg.DatabaseURL)
+{{- else if eq .ProjectConfig.Database "sqlite" }}
+	database, err := sqlite.Open(cfg.DatabaseURL)
+{{- end }}
+{{- if ne .ProjectConfig.Database "none" }}
+	if err != nil {
+		logger.Error("database connection failed", "error", err)
+		return
+	}
+	defer database.Close()
+{{- end }}
+	router := transport.NewRouter({{ if eq .ProjectConfig.Authentication "jwt" }}cfg.JWTSecret{{ end }})
+
+	srv := &http.Server{
+		Addr:    cfg.HTTPAddr,
+		Handler: router,
+	}
+
+	go func() {
+		logger.Info("server started", "address", cfg.HTTPAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("server failed", "error", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	logger.Info("shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("server forced to shutdown", "error", err)
+	}
+	logger.Info("server exited")
+}

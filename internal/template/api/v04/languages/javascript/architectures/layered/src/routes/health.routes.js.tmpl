@@ -1,0 +1,11 @@
+import { Router } from 'express';
+import { HealthService } from '../services/health.service.js';
+
+const healthService = new HealthService();
+
+export const healthRoutes = Router();
+
+healthRoutes.get('/', async (req, res) => {
+  const status = await healthService.check();
+  res.json(status);
+});

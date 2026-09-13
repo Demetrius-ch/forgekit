@@ -1,0 +1,13 @@
+import { HealthStatus } from '../entities/health.entity';
+
+export interface HealthRepository {
+  check(): Promise<HealthStatus>;
+}
+
+export class HealthUseCase {
+  constructor(private readonly healthRepository: HealthRepository) {}
+
+  async check(): Promise<HealthStatus> {
+    return this.healthRepository.check();
+  }
+}

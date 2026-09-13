@@ -1,0 +1,11 @@
+import { HealthEntity } from '../domain/health.entity.js';
+
+export class HealthUseCase {
+  constructor(healthRepository) {
+    this.healthRepository = healthRepository;
+  }
+
+  async check() {
+    return this.healthRepository.check();
+  }
+}

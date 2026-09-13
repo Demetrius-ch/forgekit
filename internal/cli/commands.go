@@ -22,6 +22,7 @@ import (
 	"github.com/Demetrius-ch/forgekit/internal/generator"
 	"github.com/Demetrius-ch/forgekit/internal/output"
 	"github.com/Demetrius-ch/forgekit/internal/ports"
+	"github.com/Demetrius-ch/forgekit/internal/projectconfig"
 	"github.com/Demetrius-ch/forgekit/internal/prompt"
 	"github.com/Demetrius-ch/forgekit/internal/report"
 	"github.com/Demetrius-ch/forgekit/internal/rules"
@@ -39,11 +40,20 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 		targetDir       string
 		dryRun          bool
 		skipPostprocess bool
+		language        string
+		architecture    string
+		database        string
+		docker          bool
+		authentication  string
+		documentation   string
+		testStrategy    string
+		ciStrategy      string
+		configFile      string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "init [nom-du-projet]",
-		Short: "Initialiser un backend REST Go (architecture hexagonale)",
+		Short: "Initialiser un backend REST (Go, TypeScript, JavaScript, Python)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			console := g.console()
@@ -64,8 +74,24 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				}
 			}
 
-			// Select ports (handles conflicts automatically)
-			portSelection, err := selectPorts(g, httpPort, postgresPort, dryRun)
+			selectedDatabase := projectconfig.Database(database)
+			if configFile != "" {
+				fileConfiguration, loadErr := projectconfig.LoadFile(configFile)
+				if loadErr != nil {
+					return loadErr
+				}
+				if fileConfiguration.Database != "" {
+					selectedDatabase = fileConfiguration.Database
+				}
+			}
+
+			// Port detection depends on the selected database engine.
+			// If --postgres-port was not explicitly set, use 0 so the database-specific default is used.
+			requestedDBPort := postgresPort
+			if !cmd.Flags().Changed("postgres-port") {
+				requestedDBPort = 0
+			}
+			portSelection, err := selectPortsForDatabase(g, httpPort, requestedDBPort, dryRun, selectedDatabase)
 			if err != nil {
 				return err
 			}
@@ -76,18 +102,20 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				dbName = defaultDatabaseName(projectName)
 			}
 
-			// Select database (handles existing databases)
-			// Pass the originally requested postgres port to know if it was auto-selected
-			dbSelection, err := selectDatabase(g, projectName, dbName, portSelection.PostgresHostPort, postgresPort, nonInteractive, dryRun)
-			if err != nil {
-				return err
+			dbSelection := DatabaseSelection{DatabaseName: dbName}
+			if selectedDatabase == projectconfig.DatabasePostgres {
+				// Pass the originally requested postgres port to know if it was auto-selected.
+				dbSelection, err = selectDatabase(g, projectName, dbName, portSelection.DBHostPort, requestedDBPort, nonInteractive, dryRun)
+				if err != nil {
+					return err
+				}
 			}
 
 			opts := generator.InitOptions{
 				ProjectName:        projectName,
 				TargetDir:          absDir,
 				HTTPPort:           portSelection.HTTPPort,
-				PostgresHostPort:   portSelection.PostgresHostPort,
+				PostgresHostPort:   portSelection.DBHostPort,
 				DryRun:             dryRun,
 				Author:             config.ResolveAuthor(author, absDir),
 				SkipPostprocess:    skipPostprocess,
@@ -108,7 +136,13 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 			} else {
 				p := prompt.New(os.Stdin, os.Stdout)
 				fmt.Fprintf(os.Stdout, "\nConfiguration du projet %q\n\n", projectName)
-				module, err := p.AskString("Chemin du module Go", defaultModulePath(projectName))
+				moduleLabel := "Chemin du module Go"
+				if projectconfig.Language(language) == projectconfig.LanguagePython {
+					moduleLabel = "Nom du package Python"
+				} else if projectconfig.Language(language) == projectconfig.LanguageTypeScript || projectconfig.Language(language) == projectconfig.LanguageJavaScript {
+					moduleLabel = "Nom du package npm"
+				}
+				module, err := p.AskString(moduleLabel, defaultModulePath(projectName))
 				if err != nil {
 					return err
 				}
@@ -141,31 +175,194 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				return err
 			}
 
+			projectConfiguration := projectconfig.Default(projectName, opts.ModulePath)
+			if configFile != "" {
+				projectConfiguration, err = projectconfig.LoadFile(configFile)
+				if err != nil {
+					return err
+				}
+				projectConfiguration, err = projectConfiguration.WithIdentity(projectName, opts.ModulePath)
+				if err != nil {
+					return err
+				}
+			}
+			if cmd.Flags().Changed("language") {
+				projectConfiguration.Language = projectconfig.Language(language)
+				if projectConfiguration.Language == projectconfig.LanguageTypeScript || projectConfiguration.Language == projectconfig.LanguageJavaScript {
+					projectConfiguration.Runtime = projectconfig.RuntimeNode
+				} else {
+					projectConfiguration.Runtime = projectconfig.RuntimeNone
+				}
+			}
+			if cmd.Flags().Changed("architecture") {
+				projectConfiguration.Architecture = projectconfig.Architecture(architecture)
+			}
+			if cmd.Flags().Changed("database") {
+				projectConfiguration.Database = projectconfig.Database(database)
+			}
+			if cmd.Flags().Changed("docker") {
+				projectConfiguration.Docker = docker
+			}
+			if cmd.Flags().Changed("auth") {
+				projectConfiguration.Authentication = projectconfig.Authentication(authentication)
+			}
+			if cmd.Flags().Changed("docs") {
+				projectConfiguration.Documentation = projectconfig.Documentation(documentation)
+			}
+			if cmd.Flags().Changed("tests") {
+				projectConfiguration.Tests = projectconfig.TestStrategy(testStrategy)
+			}
+			if cmd.Flags().Changed("ci") {
+				projectConfiguration.CI = projectconfig.CIStrategy(ciStrategy)
+			}
+			if !nonInteractive && !dryRun && configFile == "" {
+				p := prompt.New(os.Stdin, os.Stdout)
+				if language, err = p.AskString("Langage (go, typescript, javascript, python)", string(projectConfiguration.Language)); err != nil {
+					return err
+				}
+				projectConfiguration.Language = projectconfig.Language(language)
+				if projectConfiguration.Language == projectconfig.LanguageTypeScript || projectConfiguration.Language == projectconfig.LanguageJavaScript {
+					projectConfiguration.Runtime = projectconfig.RuntimeNode
+				} else {
+					projectConfiguration.Runtime = projectconfig.RuntimeNone
+				}
+				if architecture, err = p.AskString("Architecture (hexagonal, clean, layered)", string(projectConfiguration.Architecture)); err != nil {
+					return err
+				}
+				projectConfiguration.Architecture = projectconfig.Architecture(architecture)
+				if database, err = p.AskString("Base de données (postgres, mysql, sqlite, none)", string(projectConfiguration.Database)); err != nil {
+					return err
+				}
+				projectConfiguration.Database = projectconfig.Database(database)
+				if dockerChoice, promptErr := p.AskString("Docker (true, false)", fmt.Sprintf("%t", projectConfiguration.Docker)); promptErr != nil {
+					return promptErr
+				} else if dockerChoice == "true" {
+					projectConfiguration.Docker = true
+				} else if dockerChoice == "false" {
+					projectConfiguration.Docker = false
+				} else {
+					return fmt.Errorf("invalid Docker value %q; use true or false", dockerChoice)
+				}
+				if authentication, err = p.AskString("Authentification (none, jwt)", string(projectConfiguration.Authentication)); err != nil {
+					return err
+				}
+				projectConfiguration.Authentication = projectconfig.Authentication(authentication)
+				if documentation, err = p.AskString("Documentation (none, swagger)", string(projectConfiguration.Documentation)); err != nil {
+					return err
+				}
+				projectConfiguration.Documentation = projectconfig.Documentation(documentation)
+				if testStrategy, err = p.AskString("Tests (unit, unit-integration)", string(projectConfiguration.Tests)); err != nil {
+					return err
+				}
+				projectConfiguration.Tests = projectconfig.TestStrategy(testStrategy)
+				if ciStrategy, err = p.AskString("CI (none, github-actions)", string(projectConfiguration.CI)); err != nil {
+					return err
+				}
+				projectConfiguration.CI = projectconfig.CIStrategy(ciStrategy)
+			}
+			if err := projectConfiguration.Validate(); err != nil {
+				return err
+			}
+			opts.ProjectConfig = projectConfiguration
+
 			gen, err := generator.New()
 			if err != nil {
 				return err
 			}
 
-			if !dryRun && !g.Quiet {
-				fmt.Fprintf(os.Stdout, "\nGénération du projet dans %s...\n", absDir)
+			initStart := time.Now()
+			progress := output.NewProgress(os.Stdout, g.Format, g.Quiet)
+
+			if !dryRun {
+				progress.Title(fmt.Sprintf("Création de %q", projectName))
+				progress.Step("Configuration validée", 0)
+				progress.Step(fmt.Sprintf("Langage : %s", languageDisplayName(opts.ProjectConfig.Language)), 0)
+				if opts.ProjectConfig.IsNode() {
+					progress.Step(fmt.Sprintf("Runtime : %s", runtimeDisplayName(opts.ProjectConfig.Runtime)), 0)
+				}
+				progress.Step(fmt.Sprintf("Architecture : %s", archDisplayName(opts.ProjectConfig.Architecture)), 0)
+				progress.Step(fmt.Sprintf("Base de données : %s", databaseDisplayName(opts.ProjectConfig.Database)), 0)
+				if opts.ProjectConfig.Docker {
+					progress.Step("Docker : activé", 0)
+				} else {
+					progress.Step("Docker : désactivé", 0)
+				}
+				progress.Step(fmt.Sprintf("Authentification : %s", authDisplayName(opts.ProjectConfig.Authentication)), 0)
+				progress.Step(fmt.Sprintf("Documentation : %s", docsDisplayName(opts.ProjectConfig.Documentation)), 0)
+				progress.Step(fmt.Sprintf("Tests : %s", testsDisplayName(opts.ProjectConfig.Tests)), 0)
+				progress.Step(fmt.Sprintf("CI : %s", ciDisplayName(opts.ProjectConfig.CI)), 0)
+				fmt.Fprintln(os.Stdout)
 			}
+
+			genStart := time.Now()
 			plan, err := gen.Init(opts)
+			genDuration := time.Since(genStart)
 			if err != nil {
 				output.Debug(os.Stderr, g.Debug, err)
+				progress.Error("Échec de la génération")
 				return err
 			}
 			if dryRun {
 				console.PrintPlan(plan)
 				return nil
 			}
-			if !g.Quiet && g.Format == output.FormatHuman {
-				printInitSummaryOpts(opts.ProjectName, opts.ModulePath, absDir, opts.DatabaseName, opts.HTTPPort, opts.PostgresHostPort)
+			progress.Step("Génération des fichiers", genDuration)
+
+			validateStart := time.Now()
+			// Post-processing already happened inside gen.Init; just track time.
+			validateDuration := time.Since(validateStart)
+			progress.Step("Validation du projet", validateDuration)
+
+			// .forge metadata already written inside gen.Init; track time.
+			metadataDuration := time.Since(genStart) - genDuration - validateDuration
+			progress.Step("Création des métadonnées", metadataDuration)
+
+			totalDuration := time.Since(initStart)
+			if g.Format == output.FormatJSON {
+				type initResult struct {
+					SchemaVersion  string `json:"schema_version"`
+					Status         string `json:"status"`
+					Project        string `json:"project"`
+					Module         string `json:"module"`
+					Directory      string `json:"directory"`
+					Architecture   string `json:"architecture"`
+					Database       string `json:"database"`
+					Docker         bool   `json:"docker"`
+					Authentication string `json:"authentication"`
+					Documentation  string `json:"documentation"`
+					Tests          string `json:"tests"`
+					CI             string `json:"ci"`
+					HTTPPort       int    `json:"http_port"`
+					DurationMs     int64  `json:"duration_ms"`
+				}
+				return console.PrintJSON(initResult{
+					SchemaVersion:  "1",
+					Status:         "created",
+					Project:        opts.ProjectName,
+					Module:         opts.ModulePath,
+					Directory:      absDir,
+					Architecture:   string(opts.ProjectConfig.Architecture),
+					Database:       string(opts.ProjectConfig.Database),
+					Docker:         opts.ProjectConfig.Docker,
+					Authentication: string(opts.ProjectConfig.Authentication),
+					Documentation:  string(opts.ProjectConfig.Documentation),
+					Tests:          string(opts.ProjectConfig.Tests),
+					CI:             string(opts.ProjectConfig.CI),
+					HTTPPort:       opts.HTTPPort,
+					DurationMs:     totalDuration.Milliseconds(),
+				})
+			}
+			if !g.Quiet {
+				fmt.Fprintln(os.Stdout)
+				printInitSummaryOpts(opts.ProjectName, opts.ModulePath, absDir, opts.HTTPPort, opts.PostgresHostPort, opts.ProjectConfig)
+				fmt.Fprintln(os.Stdout)
+				progress.Finish(projectName, totalDuration)
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&modulePath, "module", "", "Chemin du module Go")
+	cmd.Flags().StringVar(&modulePath, "module", "", "Chemin du module (Go) ou nom du package (Python/JS/TS)")
 	cmd.Flags().IntVar(&httpPort, "port", 8080, "Port HTTP")
 	cmd.Flags().IntVar(&postgresPort, "postgres-port", 5432, "Port PostgreSQL hôte")
 	cmd.Flags().StringVar(&databaseName, "db-name", "", "Nom de la base PostgreSQL")
@@ -174,19 +371,54 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Sans prompts interactifs")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Afficher le plan sans écrire sur le disque")
 	cmd.Flags().BoolVar(&skipPostprocess, "skip-postprocess", false, "Ne pas exécuter gofmt et go test après génération")
+	cmd.Flags().StringVar(&language, "language", "go", "Langage : go, typescript, javascript, python")
+	cmd.Flags().StringVar(&architecture, "architecture", "hexagonal", "Architecture : hexagonal, clean, layered")
+	cmd.Flags().StringVar(&database, "database", "postgres", "Base de données : postgres, mysql, sqlite, none")
+	cmd.Flags().BoolVar(&docker, "docker", true, "Générer les fichiers Docker")
+	cmd.Flags().StringVar(&authentication, "auth", "none", "Authentification : none, jwt")
+	cmd.Flags().StringVar(&documentation, "docs", "none", "Documentation API : none, swagger")
+	cmd.Flags().StringVar(&testStrategy, "tests", "unit", "Tests : unit, unit-integration")
+	cmd.Flags().StringVar(&ciStrategy, "ci", "none", "CI : none, github-actions")
+	cmd.Flags().StringVar(&configFile, "config", "", "Fichier YAML de configuration v0.4")
 	return cmd
 }
 
-// PortSelection holds the selected ports for HTTP and PostgreSQL.
+// PortSelection holds the selected ports for HTTP and database.
 type PortSelection struct {
-	HTTPPort         int
-	PostgresHostPort int
+	HTTPPort   int
+	DBHostPort int
 }
 
 // selectPorts detects available ports and returns the selected ports.
 // If a port is explicitly requested (non-zero), it checks that specific port.
 // Otherwise, it starts from the default and finds the next available port.
-func selectPorts(g *globalFlags, requestedHTTPPort, requestedPostgresPort int, dryRun bool) (PortSelection, error) {
+func selectPorts(g *globalFlags, requestedHTTPPort, requestedDBPort int, dryRun bool, db projectconfig.Database) (PortSelection, error) {
+	return selectPortsForDatabase(g, requestedHTTPPort, requestedDBPort, dryRun, db)
+}
+
+func defaultDBPort(db projectconfig.Database) int {
+	switch db {
+	case projectconfig.DatabasePostgres:
+		return 5432
+	case projectconfig.DatabaseMySQL:
+		return 3306
+	default:
+		return 0
+	}
+}
+
+func dbDisplayName(db projectconfig.Database) string {
+	switch db {
+	case projectconfig.DatabasePostgres:
+		return "PostgreSQL"
+	case projectconfig.DatabaseMySQL:
+		return "MySQL"
+	default:
+		return "la base de données"
+	}
+}
+
+func selectPortsForDatabase(g *globalFlags, requestedHTTPPort, requestedDBPort int, dryRun bool, db projectconfig.Database) (PortSelection, error) {
 	checker := ports.RealPortChecker{}
 	const maxAttempts = 100
 
@@ -207,20 +439,23 @@ func selectPorts(g *globalFlags, requestedHTTPPort, requestedPostgresPort int, d
 		}
 	}
 
-	// PostgreSQL host port selection
-	postgresHostPort := requestedPostgresPort
-	if postgresHostPort == 0 {
-		postgresHostPort = 5432
-	}
-
-	if !checker.IsAvailable(postgresHostPort) {
-		if g.Format == output.FormatHuman && !g.Quiet && !dryRun {
-			fmt.Fprintf(os.Stdout, "⚠ Port PostgreSQL %d déjà utilisé.\n", postgresHostPort)
+	dbHostPort := 0
+	if db != projectconfig.DatabaseNone && db != projectconfig.DatabaseSQLite {
+		dbHostPort = requestedDBPort
+		if dbHostPort == 0 {
+			dbHostPort = defaultDBPort(db)
 		}
-		postgresHostPort = ports.FindAvailablePort(checker, postgresHostPort+1, maxAttempts)
-		if g.Format == output.FormatHuman && !g.Quiet && !dryRun {
-			fmt.Fprintf(os.Stdout, "✓ Port PostgreSQL %d disponible.\n", postgresHostPort)
-			fmt.Fprintf(os.Stdout, "Utilisation du port PostgreSQL hôte %d.\n\n", postgresHostPort)
+
+		displayName := dbDisplayName(db)
+		if !checker.IsAvailable(dbHostPort) {
+			if g.Format == output.FormatHuman && !g.Quiet && !dryRun {
+				fmt.Fprintf(os.Stdout, "⚠ Port %s %d déjà utilisé.\n", displayName, dbHostPort)
+			}
+			dbHostPort = ports.FindAvailablePort(checker, dbHostPort+1, maxAttempts)
+			if g.Format == output.FormatHuman && !g.Quiet && !dryRun {
+				fmt.Fprintf(os.Stdout, "✓ Port %s %d disponible.\n", displayName, dbHostPort)
+				fmt.Fprintf(os.Stdout, "Utilisation du port %s %d.\n\n", displayName, dbHostPort)
+			}
 		}
 	}
 
@@ -235,19 +470,22 @@ func selectPorts(g *globalFlags, requestedHTTPPort, requestedPostgresPort int, d
 		}
 		fmt.Fprintf(os.Stdout, "  sélectionné : %d\n\n", httpPort)
 
-		fmt.Fprintln(os.Stdout, "Port PostgreSQL :")
-		fmt.Fprintf(os.Stdout, "  demandé : %d\n", requestedPostgresPort)
-		if requestedPostgresPort != 0 && requestedPostgresPort != postgresHostPort {
-			fmt.Fprintf(os.Stdout, "  statut : occupé\n")
-		} else {
-			fmt.Fprintf(os.Stdout, "  statut : disponible\n")
+		if db != projectconfig.DatabaseNone && db != projectconfig.DatabaseSQLite {
+			displayName := dbDisplayName(db)
+			fmt.Fprintf(os.Stdout, "Port %s :\n", displayName)
+			fmt.Fprintf(os.Stdout, "  demandé : %d\n", requestedDBPort)
+			if requestedDBPort != 0 && requestedDBPort != dbHostPort {
+				fmt.Fprintf(os.Stdout, "  statut : occupé\n")
+			} else {
+				fmt.Fprintf(os.Stdout, "  statut : disponible\n")
+			}
+			fmt.Fprintf(os.Stdout, "  sélectionné : %d\n\n", dbHostPort)
 		}
-		fmt.Fprintf(os.Stdout, "  sélectionné : %d\n\n", postgresHostPort)
 	}
 
 	return PortSelection{
-		HTTPPort:         httpPort,
-		PostgresHostPort: postgresHostPort,
+		HTTPPort:   httpPort,
+		DBHostPort: dbHostPort,
 	}, nil
 }
 
@@ -875,6 +1113,11 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 		g.Quiet = true
 	}
 
+	// Detect project language
+	detector := feature.Detector{}
+	projectCtx, _ := detector.DetectLoose(root)
+	language := string(projectCtx.Language)
+
 	categories := []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"}
 	var allFindings []report.Finding
 	allFindings = append(allFindings, extraFindings...)
@@ -894,19 +1137,19 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 		switch cat {
 		case "Architecture":
 			reg := rules.NewRegistry(rules.ArchitectureRule{Rules: loader.ArchitectureRules()})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
 		case "Security":
 			reg := rules.NewRegistry(rules.SecuritySecretsRule{}, rules.SecurityCORSRule{})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
 		case "Configuration":
-			reg := rules.NewRegistry(rules.GoModRule{}, rules.EnvFileRule{})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+			reg := rules.NewRegistry(rules.GoModRule{}, rules.EnvFileRule{}, rules.PackageJSONRule{})
+			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
 		case "Docker":
 			reg := rules.NewRegistry(rules.DockerRule{})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
 		case "Tests":
-			// lightweight test detection: presence of _test.go files
-			findings, err = detectTests(root)
+			// lightweight test detection: presence of _test.go or .test.ts/.test.js files
+			findings, err = detectTests(root, language)
 		case "Documentation":
 			findings, err = detectDocs(root)
 		default:
@@ -1044,13 +1287,30 @@ func printCiSummary(out io.Writer, res report.Result) {
 }
 
 // detectTests returns findings about tests presence.
-func detectTests(root string) ([]report.Finding, error) {
+func detectTests(root string, language string) ([]report.Finding, error) {
 	hasTests := false
 	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
-		if strings.HasSuffix(d.Name(), "_test.go") {
+		name := d.Name()
+		// Go tests
+		if strings.HasSuffix(name, "_test.go") {
+			hasTests = true
+			return filepath.SkipDir
+		}
+		// TypeScript/JavaScript tests
+		if strings.HasSuffix(name, ".test.ts") || strings.HasSuffix(name, ".test.js") ||
+			strings.HasSuffix(name, ".spec.ts") || strings.HasSuffix(name, ".spec.js") {
+			hasTests = true
+			return filepath.SkipDir
+		}
+		// Python tests
+		if strings.HasPrefix(name, "test_") && strings.HasSuffix(name, ".py") {
+			hasTests = true
+			return filepath.SkipDir
+		}
+		if strings.HasSuffix(name, "_test.py") {
 			hasTests = true
 			return filepath.SkipDir
 		}
@@ -1157,8 +1417,16 @@ func compareFeatureVersions(root string, registry *feature.Registry, installed f
 func checkDoctorExitCode(g *globalFlags, root string, extraFindings []report.Finding, reg *rules.Registry) error {
 	console := g.console()
 
+	// Detect project language
+	detector := feature.Detector{}
+	project, _ := detector.DetectLoose(root)
+	language := string(project.Language)
+	if language == "" {
+		language = "go" // default
+	}
+
 	// Run the same rules as runReport to get all findings
-	findings, err := reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+	findings, err := reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
 	if err != nil {
 		return &CiError{Code: 2, Err: err}
 	}
@@ -1326,8 +1594,13 @@ func runReport(g *globalFlags, command, root string, reg *rules.Registry, extraF
 		spinner.Start("Analyse du projet...")
 	}
 
+	// Detect project language
+	detector := feature.Detector{}
+	projectCtx, _ := detector.DetectLoose(root)
+	language := string(projectCtx.Language)
+
 	start := time.Now()
-	findings, err := reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: "go"})
+	findings, err := reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
 	if spinner != nil {
 		if err != nil {
 			spinner.Stop("✗ Analyse interrompue")
@@ -1524,11 +1797,12 @@ func runFeatureAdd(
 		return err
 	}
 
+	addStart := time.Now()
+	progress := output.NewProgress(os.Stdout, g.Format, g.Quiet)
+
 	// Step 1: Detect project
 	if g.Format == output.FormatHuman && !g.Quiet {
-		fmt.Fprintln(console.Out, "ForgeKit Add")
-		fmt.Fprintln(console.Out, "────────────────────────────────")
-		fmt.Fprintln(console.Out)
+		progress.Title(fmt.Sprintf("Ajout de %s", name))
 	}
 
 	var spinner *output.Spinner
@@ -1550,6 +1824,11 @@ func runFeatureAdd(
 	if err != nil {
 		output.Debug(os.Stderr, g.Debug, err)
 		return err
+	}
+
+	// Check if project language supports features
+	if project.Language == feature.LanguagePython {
+		return fmt.Errorf("forge add n'est pas encore supporté pour les projets Python")
 	}
 
 	// Step 2: Find feature
@@ -1655,7 +1934,7 @@ func runFeatureAdd(
 		return printFeaturePlan(g, plan, dryRun, showPlan)
 	}
 
-	// Step 5: Install all features in order (dependencies first)
+	// Step 6: Install all features in order (dependencies first)
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
 		fmt.Fprintln(console.Out, "Installation...")
@@ -1716,27 +1995,18 @@ func runFeatureAdd(
 		fmt.Fprintln(console.Out, "  ✓ Fichiers installés")
 	}
 
-	// Step 6: Dependencies (handled in Apply)
-	if g.Format == output.FormatHuman && !g.Quiet {
-		spinner = output.NewSpinner(console.Out)
-		spinner.Start("Installation des dépendances...")
-		// Small delay to show spinner
-		time.Sleep(100 * time.Millisecond)
-		spinner.Stop("✓ Dépendances installées")
-	}
-
 	// Step 7: Validate project
 	if g.Format == output.FormatHuman && !g.Quiet {
 		spinner = output.NewSpinner(console.Out)
 		spinner.Start("Validation du projet...")
-		time.Sleep(100 * time.Millisecond)
 		spinner.Stop("✓ Projet validé")
 	}
 
+	totalDuration := time.Since(addStart)
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
 		fmt.Fprintln(console.Out, "────────────────────────────────")
-		fmt.Fprintf(console.Out, "✓ Feature %q installée avec succès\n", name)
+		fmt.Fprintf(console.Out, "✓ Feature %q installée avec succès en %s\n", name, output.FormatDuration(totalDuration))
 	}
 
 	return nil
@@ -1755,11 +2025,12 @@ func runFeatureRemove(
 		return err
 	}
 
+	removeStart := time.Now()
+	progress := output.NewProgress(os.Stdout, g.Format, g.Quiet)
+
 	// Step 1: Detect project
 	if g.Format == output.FormatHuman && !g.Quiet {
-		fmt.Fprintln(console.Out, "ForgeKit Remove")
-		fmt.Fprintln(console.Out, "────────────────────────────────")
-		fmt.Fprintln(console.Out)
+		progress.Title(fmt.Sprintf("Suppression de %s", name))
 	}
 
 	var spinner *output.Spinner
@@ -1781,6 +2052,11 @@ func runFeatureRemove(
 	if err != nil {
 		output.Debug(os.Stderr, g.Debug, err)
 		return err
+	}
+
+	// Check if project language supports features
+	if project.Language == feature.LanguagePython {
+		return fmt.Errorf("forge remove n'est pas encore supporté pour les projets Python")
 	}
 
 	// Step 2: Find feature
@@ -1903,14 +2179,14 @@ func runFeatureRemove(
 	if g.Format == output.FormatHuman && !g.Quiet {
 		spinner = output.NewSpinner(console.Out)
 		spinner.Start("Validation du projet...")
-		time.Sleep(100 * time.Millisecond)
 		spinner.Stop("✓ Projet validé")
 	}
 
+	totalDuration := time.Since(removeStart)
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
 		fmt.Fprintln(console.Out, "────────────────────────────────")
-		fmt.Fprintf(console.Out, "✓ Feature %q supprimée avec succès\n", name)
+		fmt.Fprintf(console.Out, "✓ Feature %q supprimée avec succès en %s\n", name, output.FormatDuration(totalDuration))
 	}
 
 	return nil
@@ -1990,23 +2266,25 @@ func fallbackRemove(ctx context.Context, project feature.ProjectContext, plan fe
 		}
 	}
 
-	// Remove dependencies from go.mod
-	for _, dep := range plan.Dependencies {
-		cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
-		cmd.Dir = project.Root
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			// Log but continue
+	// Remove dependencies from go.mod (Go projects only)
+	if project.Language == feature.LanguageGo {
+		for _, dep := range plan.Dependencies {
+			cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
+			cmd.Dir = project.Root
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				// Log but continue
+			}
 		}
-	}
 
-	if err := feature.RunGoModTidy(project.Root); err != nil {
-		return fmt.Errorf("go mod tidy : %w", err)
-	}
+		if err := feature.RunGoModTidy(project.Root); err != nil {
+			return fmt.Errorf("go mod tidy : %w", err)
+		}
 
-	if err := feature.RunGoFmt(project.Root); err != nil {
-		return fmt.Errorf("gofmt : %w", err)
+		if err := feature.RunGoFmt(project.Root); err != nil {
+			return fmt.Errorf("gofmt : %w", err)
+		}
 	}
 
 	if err := feature.RemoveEnvironment(project.Root, plan.Environment); err != nil {

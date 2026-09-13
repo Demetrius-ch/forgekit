@@ -1,0 +1,16 @@
+import dotenv from 'dotenv';
+import { createApp } from './app';
+
+dotenv.config();
+
+const PORT = parseInt(process.env.PORT || '{{ .HTTP_PORT }}', 10);
+
+async function main(): Promise<void> {
+  const app = createApp();
+  
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+main().catch(console.error);

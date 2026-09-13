@@ -1,0 +1,6 @@
+from domain.health_entity import HealthStatus
+
+
+class HealthUseCase:
+    def check_health(self) -> HealthStatus:
+        return HealthStatus.healthy()

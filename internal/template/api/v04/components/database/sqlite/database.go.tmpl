@@ -1,0 +1,24 @@
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+
+	_ "modernc.org/sqlite"
+)
+
+func Open(databaseURL string) (*sql.DB, error) {
+	database, err := sql.Open("sqlite", databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("open SQLite connection: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := database.PingContext(ctx); err != nil {
+		_ = database.Close()
+		return nil, fmt.Errorf("ping SQLite: %w", err)
+	}
+	return database, nil
+}

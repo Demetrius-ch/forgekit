@@ -1,0 +1,18 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      HTTP_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: "file:/data/{{ .DatabaseName }}.db?_pragma=foreign_keys(1)"
+{{- if eq .ProjectConfig.Authentication "jwt" }}
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env}"
+{{- end }}
+    ports:
+      - "{{ .HTTPPort }}:8080"
+    volumes:
+      - sqlite_data:/data
+
+volumes:
+  sqlite_data:

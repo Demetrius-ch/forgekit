@@ -1,0 +1,36 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_USER: forgekit
+      MYSQL_PASSWORD: forgekit
+      MYSQL_DATABASE: {{ .DatabaseName }}
+      MYSQL_ROOT_PASSWORD: root
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "{{ .DBHostPort }}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      HTTP_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: "forgekit:forgekit@tcp(mysql:3306)/{{ .DatabaseName }}?parseTime=true"
+{{- if eq .ProjectConfig.Authentication "jwt" }}
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env}"
+{{- end }}
+    ports:
+      - "{{ .HTTPPort }}:8080"
+
+volumes:
+  mysql_data:

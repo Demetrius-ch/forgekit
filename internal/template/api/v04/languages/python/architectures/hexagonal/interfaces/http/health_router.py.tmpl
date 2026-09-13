@@ -1,0 +1,11 @@
+from fastapi import APIRouter
+
+from application.health_usecase import HealthUseCase
+
+router = APIRouter()
+health_usecase = HealthUseCase()
+
+
+@router.get("/health")
+async def health_check():
+    return health_usecase.check_health()

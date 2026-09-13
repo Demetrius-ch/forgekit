@@ -1,0 +1,6 @@
+from entities.health_entity import Health
+
+
+class HealthUseCase:
+    def check_health(self) -> Health:
+        return Health.healthy()

@@ -7,7 +7,7 @@
 <h1 align="center">ForgeKit</h1>
 
 <p align="center">
-  <strong>Go Backend Generator</strong>
+  <strong>Multi-Language Backend Generator</strong>
 </p>
 
 <p align="center">
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  Generate production-ready Go REST APIs with a clean hexagonal architecture.
+  Generate production-ready REST APIs in Go, TypeScript, or JavaScript.
 </p>
 
 ForgeKit is a developer CLI written in Go that helps you bootstrap backend REST APIs without manually creating the same project structure, configuration, database integration, Docker files, migrations, and tests every time.
@@ -30,20 +30,21 @@ The goal is simple:
 forgekit init my-api
 ```
 
-and get a structured Go backend ready for development.
+and get a structured backend ready for development in your preferred language.
 
 ---
 
 ## ✨ Features
 
-- Generate Go REST APIs
-- Hexagonal architecture
-- PostgreSQL integration
+- **Multi-language support: Go, TypeScript, JavaScript**
+- Generate REST APIs with configurable architecture
+- Hexagonal, Clean, and Layered architectures
+- Multiple databases: PostgreSQL, MySQL, SQLite, None
 - Docker and Docker Compose
 - Database migrations
 - Environment configuration
 - Automatic tests
-- Automatic Go formatting
+- Automatic Go formatting (for Go projects)
 - Architecture validation
 - Development environment diagnostics
 - Project analysis with scoring
@@ -57,6 +58,11 @@ and get a structured Go backend ready for development.
 - **CI/CD integration with `--ci` mode**
 - **Project diagnostics with `forgekit doctor`**
 - **Feature version tracking and rollback**
+- **Multiple architectures: Hexagonal, Clean, Layered**
+- **Multiple databases: PostgreSQL, MySQL, SQLite, None**
+- **Optional Docker, Auth, Swagger, CI/CD at generation time**
+- **JSON output for `forgekit init --format json`**
+- **Interactive and non-interactive modes**
 
 ---
 
@@ -215,6 +221,156 @@ forgekit init my-api
 > **Note**: ForgeKit is a standalone binary — **Go is not required** to run ForgeKit itself. Go is only needed for `forge init` (to run `go mod tidy` and tests on the generated project), `forge add/remove`, and `forge doctor` (to check Go version).
 
 See [docs/install-windows.md](docs/install-windows.md) for detailed installation instructions, prerequisites, and troubleshooting.
+
+---
+
+## Multi-language support (v0.6)
+
+ForgeKit v0.6 introduces multi-language support. You can now generate REST APIs in Go, TypeScript, JavaScript, or Python.
+
+### Supported languages
+
+| Language | Runtime | ORM/Driver | Package manager |
+|----------|---------|------------|-----------------|
+| **Go** | None | Native drivers (pgx, go-sql-driver, sqlite) | Go modules |
+| **TypeScript** | Node.js | Prisma | npm |
+| **JavaScript** | Node.js | Prisma | npm |
+| **Python** | None | SQLAlchemy | pip |
+
+### Language selection
+
+```bash
+# Interactive mode - ForgeKit will ask for language
+forgekit init my-api
+
+# Non-interactive mode
+forgekit init my-api --language typescript --non-interactive
+forgekit init my-api --language javascript --non-interactive
+forgekit init my-api --language python --non-interactive
+```
+
+### Language-specific features
+
+**Go projects:**
+- Native Go drivers (pgx, go-sql-driver, sqlite)
+- Go modules for dependency management
+- gofmt for code formatting
+- go test for testing
+
+**TypeScript/JavaScript projects:**
+- Prisma ORM for database access
+- npm for dependency management
+- Vitest for testing
+- TypeScript compilation (for TS projects)
+
+**Python projects:**
+- FastAPI web framework
+- SQLAlchemy ORM for database access
+- pip for dependency management
+- pytest for testing
+- Virtual environment (.venv) auto-creation
+
+---
+
+## Custom project generation (v0.4)
+
+ForgeKit v0.4 allows you to customize your project at generation time. No more one-size-fits-all — choose the architecture, database, and features that fit your needs.
+
+### Interactive mode
+
+```bash
+forgekit init my-api
+```
+
+ForgeKit prompts you for each option:
+
+```text
+Project configuration
+
+Architecture: Hexagonal
+Database: PostgreSQL
+Docker: Yes
+Authentication: JWT
+Documentation: Swagger
+Tests: Unit + Integration
+CI/CD: GitHub Actions
+
+Review configuration
+
+  Architecture: Hexagonal
+  Database: PostgreSQL
+  Docker: Yes
+  Authentication: JWT
+  Documentation: Swagger
+  Tests: Unit + Integration
+  CI/CD: GitHub Actions
+
+  Continue? [Y/n]
+```
+
+### Non-interactive mode
+
+```bash
+forgekit init my-api \
+  --module github.com/example/my-api \
+  --architecture hexagonal \
+  --database postgres \
+  --docker \
+  --auth jwt \
+  --docs swagger \
+  --tests unit+integration \
+  --ci github \
+  --non-interactive
+```
+
+### Supported architectures
+
+| Architecture | Description | Path structure |
+|-------------|-------------|----------------|
+| **Hexagonal** | Ports & Adapters | `domain/`, `application/`, `transport/http/`, `infrastructure/` |
+| **Clean** | Uncle Bob's Clean Architecture | `entities/`, `usecases/`, `interfaces/http/`, `infrastructure/` |
+| **Layered** | Traditional 3-tier | `models/`, `services/`, `handlers/`, `infrastructure/` |
+
+### Supported databases
+
+| Database | Driver | Docker service | Notes |
+|----------|--------|----------------|-------|
+| **PostgreSQL** | `pgx/v5` | `postgres` | Full migration support |
+| **MySQL** | `go-sql-driver/mysql` | `mysql` | Full migration support |
+| **SQLite** | `modernc.org/sqlite` | None | File-based, no Docker needed |
+| **None** | — | — | No database components |
+
+### Preview and JSON output
+
+```bash
+# Preview files without creating them
+forgekit init my-api --dry-run
+
+# JSON output for automation
+forgekit init my-api --format json
+```
+
+Example JSON output:
+
+```json
+{
+  "project": "my-api",
+  "architecture": "hexagonal",
+  "database": "postgres",
+  "docker": true,
+  "authentication": "jwt",
+  "documentation": "swagger",
+  "files": ["cmd/server/main.go", "internal/domain/health.go", ...]
+}
+```
+
+### Backward compatibility
+
+- Existing v0.3 projects continue to work with all ForgeKit commands
+- `forgekit add`/`remove` detects architecture automatically
+- No breaking changes to CLI flags or project structure
+
+See [docs/migration-v0.3-v0.4.md](docs/migration-v0.3-v0.4.md) for details.
 
 ---
 
@@ -837,7 +993,7 @@ rm -rf .forge
 
 ## Limitations
 
-Current v0.3.0 limitations:
+Current v0.4.0 limitations:
 
 - No feature version upgrade path (manual intervention required)
 - Features must be registered in the CLI binary (no plugin system yet)
@@ -930,10 +1086,29 @@ The generated project belongs to the developer. ForgeKit does not create a propr
 - [x] JSON/quiet output modes
 - [x] Redis integration
 - [x] Swagger/OpenAPI generation
-- [ ] Additional database options
-- [ ] More project templates
-- [ ] Better project analysis
-- [ ] More automated architecture rules
+
+### v0.3.0
+
+- [x] CORS middleware (`forge add cors`)
+- [x] Structured logging (`forge add logging`)
+- [x] Feature dependency resolution
+- [x] Rollback mechanism for failed installations
+- [x] `.forge` signature validation
+- [x] Architecture-aware doctor/analyze/check/inspect
+
+### v0.4.0
+
+- [x] Multiple architectures: Hexagonal, Clean, Layered
+- [x] Multiple databases: PostgreSQL, MySQL, SQLite, None
+- [x] Optional Docker, Auth, Swagger, CI/CD at generation time
+- [x] Interactive mode with prompts and defaults
+- [x] Non-interactive mode with full config flags
+- [x] JSON output for `forgekit init`
+- [x] Graceful shutdown in generated projects
+- [x] Adaptive feature paths for all architectures
+- [x] Multi Go version CI (1.22–1.25)
+- [x] Performance benchmarks
+- [x] Cross-platform support (Linux, Windows, macOS)
 
 ### Future
 
@@ -991,6 +1166,29 @@ Issues, feature requests, documentation improvements, and pull requests are welc
 - Added rollback mechanism for failed installations
 - Added comprehensive unit tests for feature system
 - Updated generated project structure with `internal/auth/`
+
+### v0.3.0 (2026-08-15)
+
+- Added `forge add cors` for CORS middleware
+- Added `forge add logging` for structured logging
+- Added feature dependency resolution with topological sort
+- Added `.forge` signature validation for project detection
+- Added architecture-aware doctor/analyze/check/inspect
+- Added feature version tracking and comparison
+
+### v0.4.0 (2026-09-12)
+
+- Added multiple architecture support: Hexagonal, Clean, Layered
+- Added multiple database support: PostgreSQL, MySQL, SQLite, None
+- Added optional Docker, Auth, Swagger, CI/CD at generation time
+- Added interactive mode with prompts and sensible defaults
+- Added non-interactive mode with full CLI flags
+- Added JSON output for `forgekit init --format json`
+- Added graceful shutdown in all generated `main.go`
+- Added adaptive feature paths for all architectures
+- Added multi Go version CI (1.22–1.25)
+- Added performance benchmarks
+- Updated documentation with v0.4 custom generation guide
 
 ### v0.1.2
 

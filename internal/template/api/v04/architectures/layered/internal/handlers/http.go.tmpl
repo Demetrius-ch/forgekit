@@ -1,0 +1,32 @@
+package handlers
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"{{ .ModulePath }}/internal/services"
+{{- if eq .ProjectConfig.Authentication "jwt" }}
+	"{{ .ModulePath }}/internal/auth"
+{{- end }}
+{{- if eq .ProjectConfig.Documentation "swagger" }}
+	"{{ .ModulePath }}/internal/swagger"
+{{- end }}
+	"github.com/go-chi/chi/v5"
+)
+
+func NewRouter({{ if eq .ProjectConfig.Authentication "jwt" }}jwtSecret string{{ end }}) http.Handler {
+	r := chi.NewRouter()
+	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(services.Health())
+	})
+{{- if eq .ProjectConfig.Authentication "jwt" }}
+	r.With(auth.Require(jwtSecret)).Get("/protected", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+{{- end }}
+{{- if eq .ProjectConfig.Documentation "swagger" }}
+	swagger.RegisterRoutes(r)
+{{- end }}
+	return r
+}

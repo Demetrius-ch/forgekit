@@ -40,6 +40,40 @@ func (e *Engine) Execute(opts Options) ([]PlanEntry, error) {
 	return plan, nil
 }
 
+// ExecuteFiles renders only the templates selected by a generation plan. It
+// complements Execute, which is retained for compatibility with the legacy
+// full-tree template walker.
+func (e *Engine) ExecuteFiles(opts Options, files []TemplateFile) ([]PlanEntry, error) {
+	plan := make([]PlanEntry, 0, len(files))
+	for _, file := range files {
+		if filepath.IsAbs(file.Template) || filepath.IsAbs(file.Destination) {
+			return plan, fmt.Errorf("template and destination paths must be relative")
+		}
+		destination := filepath.Clean(file.Destination)
+		if destination == "." || destination == ".." || strings.HasPrefix(destination, ".."+string(filepath.Separator)) {
+			return plan, fmt.Errorf("invalid destination path %q", file.Destination)
+		}
+
+		rendered, err := template.RenderFile(opts.SourceFS, filepath.ToSlash(file.Template), opts.Data)
+		if err != nil {
+			return plan, err
+		}
+		destinationPath := filepath.Join(opts.TargetDir, destination)
+		entry := PlanEntry{Path: destinationPath, Action: ActionCreate, Mode: fileMode(destination)}
+		plan = append(plan, entry)
+		if opts.DryRun {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(destinationPath), 0o755); err != nil {
+			return plan, fmt.Errorf("créer %q : %w", filepath.Dir(destinationPath), err)
+		}
+		if err := os.WriteFile(destinationPath, rendered, entry.Mode); err != nil {
+			return plan, fmt.Errorf("écrire %q : %w", destinationPath, err)
+		}
+	}
+	return plan, nil
+}
+
 func (e *Engine) walk(src fs.FS, srcDir, dstDir string, data template.Data, dryRun bool, plan *[]PlanEntry) error {
 	entries, err := fs.ReadDir(src, srcDir)
 	if err != nil {

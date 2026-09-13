@@ -1,0 +1,11 @@
+from fastapi import APIRouter
+
+from services.health_service import HealthService
+
+router = APIRouter()
+health_service = HealthService()
+
+
+@router.get("/health")
+async def health_check():
+    return health_service.check_health()

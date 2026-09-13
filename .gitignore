@@ -49,3 +49,4 @@ debian/lintian-overrides/
 obj-*/
 *.buildinfo
 *.changes
+forgekit

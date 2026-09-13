@@ -1,0 +1,31 @@
+package tests
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+{{- if eq .ProjectConfig.Architecture "hexagonal" }}
+	transport "{{ .ModulePath }}/internal/transport/http"
+{{- else if eq .ProjectConfig.Architecture "clean" }}
+	transport "{{ .ModulePath }}/internal/interfaces/http"
+{{- else }}
+	"{{ .ModulePath }}/internal/handlers"
+{{- end }}
+)
+
+func newRouter() http.Handler {
+{{- if eq .ProjectConfig.Architecture "layered" }}
+	return handlers.NewRouter({{ if eq .ProjectConfig.Authentication "jwt" }}"test-secret"{{ end }})
+{{- else }}
+	return transport.NewRouter({{ if eq .ProjectConfig.Authentication "jwt" }}"test-secret"{{ end }})
+{{- end }}
+}
+
+func TestHealthEndpoint(t *testing.T) {
+	response := httptest.NewRecorder()
+	newRouter().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+}

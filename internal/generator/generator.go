@@ -11,6 +11,8 @@ import (
 
 	"github.com/Demetrius-ch/forgekit/internal/engine"
 	"github.com/Demetrius-ch/forgekit/internal/forge"
+	"github.com/Demetrius-ch/forgekit/internal/generationplan"
+	"github.com/Demetrius-ch/forgekit/internal/projectconfig"
 	"github.com/Demetrius-ch/forgekit/internal/template"
 )
 
@@ -49,12 +51,27 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 		}
 	}
 
+	projectConfig := opts.ProjectConfig
+	if projectConfig.IsZero() {
+		projectConfig = projectconfig.Default(opts.ProjectName, opts.ModulePath)
+	}
+	if projectConfig.Name != opts.ProjectName {
+		return nil, fmt.Errorf("project configuration name %q does not match init project name %q", projectConfig.Name, opts.ProjectName)
+	}
+	if projectConfig.ModulePath != opts.ModulePath {
+		return nil, fmt.Errorf("project configuration module %q does not match init module %q", projectConfig.ModulePath, opts.ModulePath)
+	}
+	if err := projectConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("validate project configuration: %w", err)
+	}
+
 	data := template.Data{
 		ProjectName:        opts.ProjectName,
 		ModulePath:         opts.ModulePath,
 		PackageName:        PackageNameFromProject(opts.ProjectName),
 		HTTPPort:           opts.HTTPPort,
 		PostgresHostPort:   opts.PostgresHostPort,
+		DBHostPort:         opts.PostgresHostPort,
 		DatabaseName:       opts.DatabaseName,
 		GoVersion:          "1.25",
 		Author:             opts.Author,
@@ -64,6 +81,7 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 		ExternalDBUser:     opts.ExternalDBUser,
 		ExternalDBPassword: opts.ExternalDBPassword,
 		ExternalDBName:     opts.ExternalDBName,
+		ProjectConfig:      projectConfig,
 	}
 
 	if !opts.DryRun {
@@ -72,12 +90,24 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 		}
 	}
 
-	plan, err := g.eng.Execute(engine.Options{
+	generationPlan, err := generationplan.RegistryForLanguage(projectConfig.Language).Build(projectConfig)
+	if err != nil {
+		return nil, fmt.Errorf("build generation plan: %w", err)
+	}
+	executionFiles := make([]engine.TemplateFile, 0, len(generationPlan.Files))
+	for _, file := range generationPlan.Files {
+		executionFiles = append(executionFiles, engine.TemplateFile{
+			Template:    file.Template,
+			Destination: file.Destination,
+		})
+	}
+
+	plan, err := g.eng.ExecuteFiles(engine.Options{
 		SourceFS:  g.templates,
 		TargetDir: opts.TargetDir,
 		Data:      data,
 		DryRun:    opts.DryRun,
-	})
+	}, executionFiles)
 	if err != nil {
 		if !opts.DryRun {
 			_ = os.RemoveAll(opts.TargetDir)
@@ -89,15 +119,28 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 		return plan, nil
 	}
 
-	meta := forge.CreateInitialMetadata(opts.TargetDir, opts.ProjectName, opts.ModulePath, data.GoVersion)
+	meta := forge.CreateInitialMetadataWithConfig(opts.TargetDir, data.GoVersion, projectConfig)
 	if err := forge.SaveMetadata(opts.TargetDir, meta); err != nil {
 		_ = os.RemoveAll(opts.TargetDir)
 		return plan, fmt.Errorf("create forge metadata: %w", err)
 	}
 
-	if err := g.initGoMod(opts.TargetDir, opts.ModulePath, data.GoVersion); err != nil {
-		_ = os.RemoveAll(opts.TargetDir)
-		return plan, err
+	// Initialize project based on language
+	if projectConfig.IsGo() {
+		if err := g.initGoMod(opts.TargetDir, opts.ModulePath, data.GoVersion, generationPlan.Dependencies); err != nil {
+			_ = os.RemoveAll(opts.TargetDir)
+			return plan, err
+		}
+	} else if projectConfig.IsNode() && !opts.SkipNpmInstall {
+		if err := g.initNpmProject(opts.TargetDir); err != nil {
+			_ = os.RemoveAll(opts.TargetDir)
+			return plan, err
+		}
+	} else if projectConfig.IsPython() && !opts.SkipNpmInstall {
+		if err := g.initPythonProject(opts.TargetDir); err != nil {
+			_ = os.RemoveAll(opts.TargetDir)
+			return plan, err
+		}
 	}
 
 	if !opts.SkipPostprocess {
@@ -109,7 +152,7 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	return plan, nil
 }
 
-func (g *Generator) initGoMod(dir, modulePath, goVersion string) error {
+func (g *Generator) initGoMod(dir, modulePath, goVersion string, dependencies []generationplan.Dependency) error {
 	cmd := exec.Command("go", "mod", "init", modulePath)
 	cmd.Dir = dir
 
@@ -126,6 +169,15 @@ func (g *Generator) initGoMod(dir, modulePath, goVersion string) error {
 		return fmt.Errorf("go mod edit : %s: %w", trimOutput(string(out)), err)
 	}
 
+	for _, dependency := range dependencies {
+		cmd = exec.Command("go", "mod", "edit", "-require="+dependency.Module+"@"+dependency.Version)
+		cmd.Dir = dir
+		out, err = cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("add dependency %s: %s: %w", dependency.Module, trimOutput(string(out)), err)
+		}
+	}
+
 	cmd = exec.Command("go", "mod", "tidy")
 	cmd.Dir = dir
 
@@ -137,48 +189,124 @@ func (g *Generator) initGoMod(dir, modulePath, goVersion string) error {
 	return nil
 }
 
+func (g *Generator) initNpmProject(dir string) error {
+	cmd := exec.Command("npm", "install")
+	cmd.Dir = dir
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("npm install: %s: %w", trimOutput(string(out)), err)
+	}
+
+	return nil
+}
+
+func (g *Generator) initPythonProject(dir string) error {
+	// Create virtual environment
+	cmd := exec.Command("python3", "-m", "venv", ".venv")
+	cmd.Dir = dir
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("create venv: %s: %w", trimOutput(string(out)), err)
+	}
+
+	// Install dependencies
+	cmd = exec.Command(".venv/bin/pip", "install", "-r", "requirements.txt")
+	cmd.Dir = dir
+
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("pip install: %s: %w", trimOutput(string(out)), err)
+	}
+
+	return nil
+}
+
 // PostProcessProject formats Go sources and runs the test suite for the generated project.
 func (g *Generator) PostProcessProject(dir string) error {
 	if strings.TrimSpace(dir) == "" {
 		return fmt.Errorf("le répertoire cible ne peut pas être vide")
 	}
 
-	var files []string
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if path != dir && (filepath.Base(path) == ".git" || filepath.Base(path) == "vendor") {
-				return filepath.SkipDir
+	// Check if this is a Go project
+	goMod := filepath.Join(dir, "go.mod")
+	if _, err := os.Stat(goMod); err == nil {
+		// Go project - run gofmt
+		var files []string
+		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				if path != dir && (filepath.Base(path) == ".git" || filepath.Base(path) == "vendor") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if filepath.Ext(path) == ".go" {
+				files = append(files, path)
 			}
 			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("parcourir le projet : %w", err)
 		}
-		if filepath.Ext(path) == ".go" {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("parcourir le projet : %w", err)
-	}
 
-	if len(files) > 0 {
-		cmd := exec.Command("gofmt", append([]string{"-w"}, files...)...)
+		if len(files) > 0 {
+			cmd := exec.Command("gofmt", append([]string{"-w"}, files...)...)
+			cmd.Dir = dir
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				return fmt.Errorf("gofmt : %s: %w", trimOutput(string(out)), err)
+			}
+		}
+
+		cmd := exec.Command("go", "test", "./...")
 		cmd.Dir = dir
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("gofmt : %s: %w", trimOutput(string(out)), err)
+			return fmt.Errorf("go test : %s: %w", trimOutput(string(out)), err)
 		}
+		return nil
 	}
 
-	cmd := exec.Command("go", "test", "./...")
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("go test : %s: %w", trimOutput(string(out)), err)
+	// Check if this is a Python project
+	requirementsTxt := filepath.Join(dir, "requirements.txt")
+	if _, err := os.Stat(requirementsTxt); err == nil {
+		// Python project - run syntax check on .py files
+		var files []string
+		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				if path != dir && (filepath.Base(path) == ".git" || filepath.Base(path) == ".venv") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if filepath.Ext(path) == ".py" {
+				files = append(files, path)
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("parcourir le projet : %w", err)
+		}
+
+		// Syntax check using python -m py_compile
+		for _, file := range files {
+			cmd := exec.Command("python3", "-m", "py_compile", file)
+			cmd.Dir = dir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("python syntax check %s : %s: %w", file, trimOutput(string(out)), err)
+			}
+		}
+		return nil
 	}
 
+	// Not a Go or Python project, skip post-processing
 	return nil
 }
 

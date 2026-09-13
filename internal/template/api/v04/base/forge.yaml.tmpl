@@ -1,0 +1,43 @@
+project:
+  name: "{{ .ProjectConfig.Name }}"
+  language: "{{ .ProjectConfig.Language }}"
+  runtime: "{{ .ProjectConfig.Runtime }}"
+  module: "{{ .ProjectConfig.ModulePath }}"
+  database: "{{ .ProjectConfig.Database }}"
+  docker: {{ .ProjectConfig.Docker }}
+  authentication: "{{ .ProjectConfig.Authentication }}"
+  documentation: "{{ .ProjectConfig.Documentation }}"
+  tests: "{{ .ProjectConfig.Tests }}"
+  ci: "{{ .ProjectConfig.CI }}"
+
+architecture:
+  kind: "{{ .ProjectConfig.Architecture }}"
+  rules:
+{{- if eq .ProjectConfig.Architecture "hexagonal" }}
+    - from: domain
+      to: infrastructure
+      allow: false
+    - from: domain
+      to: transport
+      allow: false
+    - from: application
+      to: transport
+      allow: false
+{{- else if eq .ProjectConfig.Architecture "clean" }}
+    - from: entities
+      to: infrastructure
+      allow: false
+    - from: entities
+      to: interfaces
+      allow: false
+    - from: usecases
+      to: interfaces
+      allow: false
+{{- else }}
+    - from: models
+      to: handlers
+      allow: false
+    - from: repositories
+      to: handlers
+      allow: false
+{{- end }}

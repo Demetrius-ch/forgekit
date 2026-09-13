@@ -1,0 +1,13 @@
+export interface HealthStatus {
+  status: string;
+  timestamp: string;
+}
+
+export class HealthService {
+  async check(): Promise<HealthStatus> {
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    };
+  }
+}

@@ -1,0 +1,39 @@
+package config
+
+import (
+{{- if or (ne .ProjectConfig.Database "none") (eq .ProjectConfig.Authentication "jwt") }}
+	"fmt"
+{{- end }}
+	"os"
+)
+
+type Config struct {
+	HTTPAddr string
+{{- if ne .ProjectConfig.Database "none" }}
+	DatabaseURL string
+{{- end }}
+{{- if eq .ProjectConfig.Authentication "jwt" }}
+	JWTSecret string
+{{- end }}
+}
+
+func Load() (Config, error) {
+	addr := os.Getenv("HTTP_ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+	config := Config{HTTPAddr: addr}
+{{- if ne .ProjectConfig.Database "none" }}
+	config.DatabaseURL = os.Getenv("DATABASE_URL")
+	if config.DatabaseURL == "" {
+		return Config{}, fmt.Errorf("DATABASE_URL is required")
+	}
+{{- end }}
+{{- if eq .ProjectConfig.Authentication "jwt" }}
+	config.JWTSecret = os.Getenv("JWT_SECRET")
+	if config.JWTSecret == "" {
+		return Config{}, fmt.Errorf("JWT_SECRET is required")
+	}
+{{- end }}
+	return config, nil
+}

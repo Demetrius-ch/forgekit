@@ -1,0 +1,12 @@
+from datetime import datetime, timezone
+
+from models.health_model import HealthModel
+
+
+class HealthService:
+    def check_health(self) -> HealthModel:
+        return HealthModel(
+            status="healthy",
+            timestamp=datetime.now(timezone.utc),
+            version="1.0.0",
+        )

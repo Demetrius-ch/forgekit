@@ -1,0 +1,21 @@
+package swagger
+
+import (
+	_ "embed"
+	"net/http"
+
+	httpSwagger "github.com/swaggo/http-swagger"
+	"github.com/go-chi/chi/v5"
+)
+
+//go:embed openapi.yaml
+var specification []byte
+
+// RegisterRoutes exposes the OpenAPI document and Swagger UI.
+func RegisterRoutes(router chi.Router) {
+	router.Get("/openapi.yaml", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write(specification)
+	})
+	router.Get("/docs/*", httpSwagger.WrapHandler)
+}

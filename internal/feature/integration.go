@@ -13,12 +13,86 @@ type RouterIntegration struct {
 	ImportPath      string
 	MiddlewareCall  string
 	MiddlewareCheck string // String to check if already integrated
+	RouterPath      string // Optional: explicit path to router.go (auto-detected if empty)
+}
+
+// MainIntegration holds the configuration for integrating a feature into main.go
+type MainIntegration struct {
+	ModulePath   string
+	ImportPath   string
+	ImportCheck  string
+	BlankImport  bool // If true, use blank import (_ "path") instead of regular import
+	Replacements []MainReplacement
+	MainPath     string // Optional: explicit path to main.go (auto-detected if empty)
+}
+
+// MainReplacement represents a string replacement in main.go
+type MainReplacement struct {
+	OldStr string
+	NewStr string
+	Check  string // Optional: only replace if Check is found
+}
+
+// findRouterPath searches for router.go across known architecture layouts.
+// Returns empty string if not found.
+func findRouterPath(projectRoot string) string {
+	candidates := []string{
+		filepath.Join(projectRoot, "internal", "transport", "http", "router.go"),  // hexagonal
+		filepath.Join(projectRoot, "internal", "interfaces", "http", "router.go"), // clean
+		filepath.Join(projectRoot, "internal", "handlers", "http.go"),             // layered
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// findMainPath searches for main.go in known locations.
+// Returns empty string if not found.
+func findMainPath(projectRoot string) string {
+	candidates := []string{
+		filepath.Join(projectRoot, "cmd", "server", "main.go"),
+		filepath.Join(projectRoot, "cmd", "main.go"),
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// resolveRouterPath returns the explicit path or auto-detects it.
+func resolveRouterPath(projectRoot string, integration RouterIntegration) (string, error) {
+	if integration.RouterPath != "" {
+		return integration.RouterPath, nil
+	}
+	if p := findRouterPath(projectRoot); p != "" {
+		return p, nil
+	}
+	return "", fmt.Errorf("router.go introuvable dans le projet (architectures supportées: hexagonal, clean, layered)")
+}
+
+// resolveMainPath returns the explicit path or auto-detects it.
+func resolveMainPath(projectRoot string, integration MainIntegration) (string, error) {
+	if integration.MainPath != "" {
+		return integration.MainPath, nil
+	}
+	if p := findMainPath(projectRoot); p != "" {
+		return p, nil
+	}
+	return "", fmt.Errorf("main.go introuvable dans le projet")
 }
 
 // IntegrateRouterGo safely integrates a feature into router.go
 // It handles multiple features by properly merging imports and middleware calls
 func IntegrateRouterGo(projectRoot string, integration RouterIntegration) error {
-	routerPath := filepath.Join(projectRoot, "internal", "transport", "http", "router.go")
+	routerPath, err := resolveRouterPath(projectRoot, integration)
+	if err != nil {
+		return err
+	}
 	content, err := os.ReadFile(routerPath)
 	if err != nil {
 		return fmt.Errorf("lire router.go : %w", err)
@@ -72,26 +146,13 @@ func IntegrateRouterGo(projectRoot string, integration RouterIntegration) error 
 	return nil
 }
 
-// MainIntegration holds the configuration for integrating a feature into main.go
-type MainIntegration struct {
-	ModulePath   string
-	ImportPath   string
-	ImportCheck  string
-	BlankImport  bool // If true, use blank import (_ "path") instead of regular import
-	Replacements []MainReplacement
-}
-
-// MainReplacement represents a string replacement in main.go
-type MainReplacement struct {
-	OldStr string
-	NewStr string
-	Check  string // Optional: only replace if Check is found
-}
-
 // RemoveRouterGo safely removes a feature's integration from router.go
 // It only removes the specific feature's import and middleware call, preserving other features
 func RemoveRouterGo(projectRoot string, integration RouterIntegration) error {
-	routerPath := filepath.Join(projectRoot, "internal", "transport", "http", "router.go")
+	routerPath, err := resolveRouterPath(projectRoot, integration)
+	if err != nil {
+		return err
+	}
 	content, err := os.ReadFile(routerPath)
 	if err != nil {
 		return fmt.Errorf("lire router.go : %w", err)
@@ -163,7 +224,10 @@ func removeImportFromBlock(src, importPath string) string {
 
 // RemoveMainGo safely removes a feature's integration from main.go
 func RemoveMainGo(projectRoot string, integration MainIntegration) error {
-	mainPath := filepath.Join(projectRoot, "cmd", "server", "main.go")
+	mainPath, err := resolveMainPath(projectRoot, integration)
+	if err != nil {
+		return err
+	}
 	content, err := os.ReadFile(mainPath)
 	if err != nil {
 		return fmt.Errorf("lire main.go : %w", err)
@@ -210,7 +274,10 @@ func RemoveMainGo(projectRoot string, integration MainIntegration) error {
 
 // IntegrateMainGo safely integrates a feature into main.go
 func IntegrateMainGo(projectRoot string, integration MainIntegration) error {
-	mainPath := filepath.Join(projectRoot, "cmd", "server", "main.go")
+	mainPath, err := resolveMainPath(projectRoot, integration)
+	if err != nil {
+		return err
+	}
 	content, err := os.ReadFile(mainPath)
 	if err != nil {
 		return fmt.Errorf("lire main.go : %w", err)

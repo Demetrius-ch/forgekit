@@ -1,0 +1,8 @@
+package usecases
+
+import "{{ .ModulePath }}/internal/entities"
+
+// Health executes the health use case.
+func Health() entities.Health {
+	return entities.Health{Status: "ok"}
+}

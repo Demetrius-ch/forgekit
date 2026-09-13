@@ -20,6 +20,16 @@ const (
 	ProjectTypeInvalidForgeKit
 )
 
+// ProjectLanguage identifies the programming language of the project.
+type ProjectLanguage string
+
+const (
+	LanguageGo         ProjectLanguage = "go"
+	LanguageTypeScript ProjectLanguage = "typescript"
+	LanguageJavaScript ProjectLanguage = "javascript"
+	LanguagePython     ProjectLanguage = "python"
+)
+
 // ProjectContext describes the ForgeKit project receiving a feature.
 type ProjectContext struct {
 	Root      string
@@ -27,6 +37,7 @@ type ProjectContext struct {
 	GoVersion string
 	HTTPPort  int
 	Type      ProjectType
+	Language  ProjectLanguage
 }
 
 // Detector detects and loads information about a ForgeKit project.
@@ -44,12 +55,12 @@ func (Detector) Detect(root string) (ProjectContext, error) {
 }
 
 // DetectLoose inspects the project root and returns its context.
-// Loose mode: accepts ForgeKit projects, legacy projects, and external compatible Go projects.
+// Loose mode: accepts ForgeKit projects, legacy projects, and external compatible projects.
 func (Detector) DetectLoose(root string) (ProjectContext, error) {
 	ctx, ptype := detectProject(root, true)
 	ctx.Type = ptype
 	if ptype == ProjectTypeUnknown {
-		return ctx, fmt.Errorf("projet Go non détecté")
+		return ctx, fmt.Errorf("projet non détecté")
 	}
 	return ctx, nil
 }
@@ -76,23 +87,6 @@ func detectProject(root string, loose bool) (ProjectContext, ProjectType) {
 		return ProjectContext{}, ProjectTypeUnknown
 	}
 
-	goModPath := filepath.Join(root, "go.mod")
-
-	data, err := os.ReadFile(goModPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return ProjectContext{}, ProjectTypeUnknown
-		}
-		return ProjectContext{}, ProjectTypeUnknown
-	}
-
-	module := parseModule(data)
-	if module == "" {
-		return ProjectContext{}, ProjectTypeUnknown
-	}
-
-	goVersion := parseGoVersion(data)
-
 	// Check for ForgeKit signature
 	forgeDir := filepath.Join(root, ".forge")
 	_, forgeDirErr := os.Stat(forgeDir)
@@ -103,10 +97,45 @@ func detectProject(root string, loose bool) (ProjectContext, ProjectType) {
 	hasForgeYaml := forgeYamlErr == nil
 	hasFeaturesYaml := featuresYamlErr == nil
 
-	// Check for ForgeKit structure
-	hasCmdServer := true
-	if _, err := os.Stat(filepath.Join(root, "cmd", "server")); err != nil {
-		hasCmdServer = false
+	// Detect language
+	language := detectLanguage(root)
+
+	var module string
+	var goVersion string
+
+	// For Go projects, parse go.mod
+	if language == LanguageGo || language == "" {
+		goModPath := filepath.Join(root, "go.mod")
+		data, err := os.ReadFile(goModPath)
+		if err == nil {
+			module = parseModule(data)
+			goVersion = parseGoVersion(data)
+			// For Go projects, module is required
+			if module == "" {
+				return ProjectContext{}, ProjectTypeUnknown
+			}
+		} else if language == LanguageGo {
+			// Go project but no go.mod
+			return ProjectContext{}, ProjectTypeUnknown
+		}
+	} else if language == LanguagePython {
+		// For Python projects, use pyproject.toml name or directory name
+		pyprojectPath := filepath.Join(root, "pyproject.toml")
+		data, err := os.ReadFile(pyprojectPath)
+		if err == nil {
+			module = parsePyprojectName(data)
+		}
+		if module == "" {
+			// Use directory name as fallback
+			module = filepath.Base(root)
+		}
+	} else {
+		// For JS/TS projects, use package.json name
+		packageJSONPath := filepath.Join(root, "package.json")
+		data, err := os.ReadFile(packageJSONPath)
+		if err == nil {
+			module = parsePackageName(data)
+		}
 	}
 
 	var ptype ProjectType
@@ -115,11 +144,11 @@ func detectProject(root string, loose bool) (ProjectContext, ProjectType) {
 		ptype = ProjectTypeForgeKit
 	} else if hasForgeDir && hasFeaturesYaml && !hasForgeYaml {
 		ptype = ProjectTypeLegacyForgeKit
-	} else if loose && hasCmdServer {
-		// External compatible: has Go module + cmd/server structure
-		ptype = ProjectTypeExternalCompatible
 	} else if hasForgeDir && !hasForgeYaml && !hasFeaturesYaml {
 		ptype = ProjectTypeInvalidForgeKit
+	} else if loose && language != "" {
+		// External compatible: has language-specific files
+		ptype = ProjectTypeExternalCompatible
 	} else {
 		ptype = ProjectTypeUnknown
 	}
@@ -132,7 +161,33 @@ func detectProject(root string, loose bool) (ProjectContext, ProjectType) {
 		GoVersion: goVersion,
 		HTTPPort:  httpPort,
 		Type:      ptype,
+		Language:  language,
 	}, ptype
+}
+
+// detectLanguage identifies the project language based on files present.
+func detectLanguage(root string) ProjectLanguage {
+	// Check for Go
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err == nil {
+		return LanguageGo
+	}
+	// Check for TypeScript
+	if _, err := os.Stat(filepath.Join(root, "tsconfig.json")); err == nil {
+		return LanguageTypeScript
+	}
+	// Check for JavaScript
+	if _, err := os.Stat(filepath.Join(root, "package.json")); err == nil {
+		// Could be JS or TS, default to JS if no tsconfig
+		return LanguageJavaScript
+	}
+	// Check for Python
+	if _, err := os.Stat(filepath.Join(root, "requirements.txt")); err == nil {
+		return LanguagePython
+	}
+	if _, err := os.Stat(filepath.Join(root, "pyproject.toml")); err == nil {
+		return LanguagePython
+	}
+	return ""
 }
 
 func readHTTPPort(root string) int {
@@ -181,5 +236,45 @@ func parseGoVersion(data []byte) string {
 		}
 	}
 
+	return ""
+}
+
+func parsePackageName(data []byte) string {
+	// Simple JSON parse for name field
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, `"name"`) && strings.Contains(line, ":") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				name := strings.Trim(strings.TrimSpace(parts[1]), `",`)
+				return name
+			}
+		}
+	}
+	return ""
+}
+
+func parsePyprojectName(data []byte) string {
+	// Simple TOML parse for name field in [project] section
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	inProjectSection := false
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "[project]" {
+			inProjectSection = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") && inProjectSection {
+			break
+		}
+		if inProjectSection && strings.HasPrefix(line, "name") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				name := strings.Trim(strings.TrimSpace(parts[1]), `"`)
+				return name
+			}
+		}
+	}
 	return ""
 }

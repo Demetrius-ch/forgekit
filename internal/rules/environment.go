@@ -23,7 +23,11 @@ func (GoVersionRule) Severity() report.Severity {
 	return report.SeverityError
 }
 
-func (GoVersionRule) Run(_ context.Context, _ Context) ([]report.Finding, error) {
+func (GoVersionRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	// Skip for non-Go projects
+	if rctx.Language != "" && rctx.Language != "go" {
+		return nil, nil
+	}
 	out, err := exec.Command("go", "version").CombinedOutput()
 	if err != nil {
 		return []report.Finding{{
@@ -34,6 +38,118 @@ func (GoVersionRule) Run(_ context.Context, _ Context) ([]report.Finding, error)
 	return []report.Finding{{
 		ID: "env.go.version", Category: "pass", Severity: report.SeverityInfo,
 		Message: strings.TrimSpace(string(out)),
+	}}, nil
+}
+
+type NodeVersionRule struct{}
+
+func (NodeVersionRule) ID() string          { return "env.node.version" }
+func (NodeVersionRule) Name() string        { return "Version Node.js" }
+func (NodeVersionRule) Description() string { return "Vérifie que Node.js est installé" }
+func (NodeVersionRule) Category() string    { return "environment" }
+func (NodeVersionRule) Severity() report.Severity {
+	return report.SeverityError
+}
+
+func (NodeVersionRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	// Only for Node.js projects
+	if rctx.Language != "typescript" && rctx.Language != "javascript" {
+		return nil, nil
+	}
+	out, err := exec.Command("node", "--version").CombinedOutput()
+	if err != nil {
+		return []report.Finding{{
+			ID: "env.node.version", Category: "environment", Severity: report.SeverityError,
+			Message: "Node.js n'est pas installé ou inaccessible", Suggestion: "Installez Node.js 18+ et vérifiez PATH",
+		}}, nil
+	}
+	return []report.Finding{{
+		ID: "env.node.version", Category: "pass", Severity: report.SeverityInfo,
+		Message: strings.TrimSpace(string(out)),
+	}}, nil
+}
+
+type NpmRule struct{}
+
+func (NpmRule) ID() string          { return "env.npm" }
+func (NpmRule) Name() string        { return "npm" }
+func (NpmRule) Description() string { return "Vérifie que npm est installé" }
+func (NpmRule) Category() string    { return "environment" }
+func (NpmRule) Severity() report.Severity {
+	return report.SeverityError
+}
+
+func (NpmRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	// Only for Node.js projects
+	if rctx.Language != "typescript" && rctx.Language != "javascript" {
+		return nil, nil
+	}
+	out, err := exec.Command("npm", "--version").CombinedOutput()
+	if err != nil {
+		return []report.Finding{{
+			ID: "env.npm", Category: "environment", Severity: report.SeverityError,
+			Message: "npm n'est pas installé ou inaccessible", Suggestion: "Installez npm avec Node.js",
+		}}, nil
+	}
+	return []report.Finding{{
+		ID: "env.npm", Category: "pass", Severity: report.SeverityInfo,
+		Message: "npm " + strings.TrimSpace(string(out)),
+	}}, nil
+}
+
+type PythonVersionRule struct{}
+
+func (PythonVersionRule) ID() string          { return "env.python.version" }
+func (PythonVersionRule) Name() string        { return "Version Python" }
+func (PythonVersionRule) Description() string { return "Vérifie que Python est installé" }
+func (PythonVersionRule) Category() string    { return "environment" }
+func (PythonVersionRule) Severity() report.Severity {
+	return report.SeverityError
+}
+
+func (PythonVersionRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	// Only for Python projects
+	if rctx.Language != "python" {
+		return nil, nil
+	}
+	out, err := exec.Command("python3", "--version").CombinedOutput()
+	if err != nil {
+		return []report.Finding{{
+			ID: "env.python.version", Category: "environment", Severity: report.SeverityError,
+			Message: "Python n'est pas installé ou inaccessible", Suggestion: "Installez Python 3.11+ et vérifiez PATH",
+		}}, nil
+	}
+	return []report.Finding{{
+		ID: "env.python.version", Category: "pass", Severity: report.SeverityInfo,
+		Message: strings.TrimSpace(string(out)),
+	}}, nil
+}
+
+type PipRule struct{}
+
+func (PipRule) ID() string          { return "env.pip" }
+func (PipRule) Name() string        { return "pip" }
+func (PipRule) Description() string { return "Vérifie que pip est installé" }
+func (PipRule) Category() string    { return "environment" }
+func (PipRule) Severity() report.Severity {
+	return report.SeverityError
+}
+
+func (PipRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	// Only for Python projects
+	if rctx.Language != "python" {
+		return nil, nil
+	}
+	out, err := exec.Command("pip3", "--version").CombinedOutput()
+	if err != nil {
+		return []report.Finding{{
+			ID: "env.pip", Category: "environment", Severity: report.SeverityError,
+			Message: "pip n'est pas installé ou inaccessible", Suggestion: "Installez pip avec Python",
+		}}, nil
+	}
+	return []report.Finding{{
+		ID: "env.pip", Category: "pass", Severity: report.SeverityInfo,
+		Message: "pip " + strings.TrimSpace(string(out)),
 	}}, nil
 }
 
@@ -121,6 +237,10 @@ func (GoModRule) Severity() report.Severity {
 }
 
 func (GoModRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	// Skip for non-Go projects
+	if rctx.Language != "" && rctx.Language != "go" {
+		return nil, nil
+	}
 	if _, err := os.Stat(filepath.Join(rctx.ProjectRoot, "go.mod")); err != nil {
 		return []report.Finding{{
 			ID: "project.gomod", Category: "project", Severity: report.SeverityError,
@@ -137,6 +257,60 @@ func (GoModRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) 
 	return []report.Finding{{
 		ID: "project.gomod", Category: "pass", Severity: report.SeverityInfo,
 		Message: fmt.Sprintf("Module Go : %s", p.Module),
+	}}, nil
+}
+
+type PackageJSONRule struct{}
+
+func (PackageJSONRule) ID() string          { return "project.packagejson" }
+func (PackageJSONRule) Name() string        { return "package.json" }
+func (PackageJSONRule) Description() string { return "Vérifie la présence de package.json" }
+func (PackageJSONRule) Category() string    { return "project" }
+func (PackageJSONRule) Severity() report.Severity {
+	return report.SeverityError
+}
+
+func (PackageJSONRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	// Only for Node.js projects
+	if rctx.Language != "typescript" && rctx.Language != "javascript" {
+		return nil, nil
+	}
+	if _, err := os.Stat(filepath.Join(rctx.ProjectRoot, "package.json")); err != nil {
+		return []report.Finding{{
+			ID: "project.packagejson", Category: "project", Severity: report.SeverityError,
+			Message: "package.json introuvable", Suggestion: "Exécutez forge init ou npm init",
+		}}, nil
+	}
+	return []report.Finding{{
+		ID: "project.packagejson", Category: "pass", Severity: report.SeverityInfo,
+		Message: "package.json présent",
+	}}, nil
+}
+
+type RequirementsTxtRule struct{}
+
+func (RequirementsTxtRule) ID() string          { return "project.requirementstxt" }
+func (RequirementsTxtRule) Name() string        { return "requirements.txt" }
+func (RequirementsTxtRule) Description() string { return "Vérifie la présence de requirements.txt" }
+func (RequirementsTxtRule) Category() string    { return "project" }
+func (RequirementsTxtRule) Severity() report.Severity {
+	return report.SeverityError
+}
+
+func (RequirementsTxtRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	// Only for Python projects
+	if rctx.Language != "python" {
+		return nil, nil
+	}
+	if _, err := os.Stat(filepath.Join(rctx.ProjectRoot, "requirements.txt")); err != nil {
+		return []report.Finding{{
+			ID: "project.requirementstxt", Category: "project", Severity: report.SeverityError,
+			Message: "requirements.txt introuvable", Suggestion: "Exécutez forge init ou pip freeze > requirements.txt",
+		}}, nil
+	}
+	return []report.Finding{{
+		ID: "project.requirementstxt", Category: "pass", Severity: report.SeverityInfo,
+		Message: "requirements.txt présent",
 	}}, nil
 }
 
@@ -572,9 +746,15 @@ func CheckRules(cfg configLoader) *Registry {
 func DoctorRules() *Registry {
 	return NewRegistry(
 		GoVersionRule{},
+		NodeVersionRule{},
+		NpmRule{},
+		PythonVersionRule{},
+		PipRule{},
 		GitRule{},
 		DockerRule{},
 		GoModRule{},
+		PackageJSONRule{},
+		RequirementsTxtRule{},
 		EnvFileRule{},
 		SecuritySensitiveFilesRule{},
 		GracefulShutdownRule{},

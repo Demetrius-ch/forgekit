@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Demetrius-ch/forgekit/internal/generator"
+	"github.com/Demetrius-ch/forgekit/internal/projectconfig"
 )
 
 func TestValidateProjectName(t *testing.T) {
@@ -171,12 +172,13 @@ func TestGeneratorInit(t *testing.T) {
 
 	required := []string{
 		"cmd/server/main.go",
-		"internal/domain/user.go",
-		"internal/application/user/service.go",
-		"internal/infrastructure/postgres/pool.go",
+		"internal/domain/health.go",
+		"internal/application/health.go",
 		"internal/transport/http/router.go",
+		"internal/infrastructure/postgres/database.go",
 		"migrations/000001_init.up.sql",
 		"docker/docker-compose.yml",
+		"docker/Dockerfile",
 		"forge.yaml",
 		".env.example",
 		"README.md",
@@ -188,5 +190,104 @@ func TestGeneratorInit(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("missing generated file %s: %v", rel, err)
 		}
+	}
+}
+
+func TestGeneratorDryRunComposesSelectedConfiguration(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		config     projectconfig.ProjectConfig
+		want       []string
+		mustNotSee []string
+	}{
+		{
+			name:   "hexagonal postgres with docker",
+			config: projectconfig.Default("hex-api", "github.com/example/hex-api"),
+			want: []string{
+				"internal/domain/health.go", "internal/infrastructure/postgres/database.go", "docker/docker-compose.yml",
+			},
+			mustNotSee: []string{"internal/auth/jwt.go", "internal/swagger/swagger.go"},
+		},
+		{
+			name: "clean mysql with optional components",
+			config: projectconfig.ProjectConfig{
+				Name:           "clean-api",
+				ModulePath:     "github.com/example/clean-api",
+				Language:       projectconfig.LanguageGo,
+				Runtime:        projectconfig.RuntimeNone,
+				Architecture:   projectconfig.ArchitectureClean,
+				Database:       projectconfig.DatabaseMySQL,
+				Docker:         true,
+				Authentication: projectconfig.AuthenticationJWT,
+				Documentation:  projectconfig.DocumentationSwagger,
+				Tests:          projectconfig.TestStrategyUnitIntegration,
+				CI:             projectconfig.CIStrategyGitHub,
+			},
+			want: []string{
+				"internal/entities/health.go", "internal/infrastructure/mysql/database.go", "internal/auth/jwt.go",
+				"internal/swagger/swagger.go", "tests/http_integration_test.go", ".github/workflows/ci.yml",
+			},
+		},
+		{
+			name: "layered without database or docker",
+			config: projectconfig.ProjectConfig{
+				Name:           "minimal-api",
+				ModulePath:     "github.com/example/minimal-api",
+				Language:       projectconfig.LanguageGo,
+				Runtime:        projectconfig.RuntimeNone,
+				Architecture:   projectconfig.ArchitectureLayered,
+				Database:       projectconfig.DatabaseNone,
+				Docker:         false,
+				Authentication: projectconfig.AuthenticationNone,
+				Documentation:  projectconfig.DocumentationNone,
+				Tests:          projectconfig.TestStrategyUnit,
+				CI:             projectconfig.CIStrategyNone,
+			},
+			want:       []string{"internal/models/health.go", "internal/handlers/http.go"},
+			mustNotSee: []string{"migrations/000001_init.up.sql", "docker/Dockerfile", "internal/infrastructure/postgres/database.go"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gen, err := generator.New()
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+			plan, err := gen.Init(generator.InitOptions{
+				ProjectName:   tt.config.Name,
+				ModulePath:    tt.config.ModulePath,
+				HTTPPort:      8080,
+				DatabaseName:  "test_api",
+				TargetDir:     filepath.Join(t.TempDir(), tt.config.Name),
+				DryRun:        true,
+				ProjectConfig: tt.config,
+			})
+			if err != nil {
+				t.Fatalf("Init() error = %v", err)
+			}
+
+			for _, want := range tt.want {
+				found := false
+				for _, file := range plan {
+					if strings.HasSuffix(filepath.ToSlash(file.Path), want) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("dry-run plan does not include %q", want)
+				}
+			}
+			for _, forbidden := range tt.mustNotSee {
+				for _, file := range plan {
+					if strings.HasSuffix(filepath.ToSlash(file.Path), forbidden) {
+						t.Errorf("dry-run plan unexpectedly includes %q", forbidden)
+					}
+				}
+			}
+		})
 	}
 }

@@ -1,0 +1,22 @@
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    APP_NAME: str = "{{ .ProjectName }}"
+    APP_ENV: str = "development"
+    DEBUG: bool = True
+
+    HOST: str = "0.0.0.0"
+    PORT: int = {{ .HTTP_PORT }}
+
+    DATABASE_URL: str = "{{ if eq .ProjectConfig.Database "postgres" }}postgresql://postgres:postgres@localhost:5432/{{ .DatabaseName }}{{ else if eq .ProjectConfig.Database "mysql" }}mysql://root:root@localhost:3306/{{ .DatabaseName }}{{ else if eq .ProjectConfig.Database "sqlite" }}sqlite:///./{{ .DatabaseName }}.db{{ else }}{{ end }}"
+
+    JWT_SECRET_KEY: str = "your-secret-key-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_MINUTES: int = 30
+
+    class Config:
+        env_file = ".env"
+
+
+settings = Settings()
