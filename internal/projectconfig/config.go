@@ -96,6 +96,8 @@ type ProjectConfig struct {
 	Documentation  Documentation  `yaml:"documentation" json:"documentation"`
 	Tests          TestStrategy   `yaml:"tests" json:"tests"`
 	CI             CIStrategy     `yaml:"ci" json:"ci"`
+	TemplateVersion string        `yaml:"templateVersion" json:"templateVersion"`
+
 }
 
 // Default returns the v0.6-compatible generation profile. Optional components
@@ -113,6 +115,7 @@ func Default(name, modulePath string) ProjectConfig {
 		Documentation:  DocumentationNone,
 		Tests:          TestStrategyUnit,
 		CI:             CIStrategyNone,
+		TemplateVersion: "",
 	}
 }
 

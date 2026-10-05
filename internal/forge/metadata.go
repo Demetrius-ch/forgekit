@@ -21,6 +21,7 @@ const (
 
 type ForgeMetadata struct {
 	Version       string                       `yaml:"version"`
+	TemplateVersion string        `yaml:"templateVersion,omitempty"`
 	Schema        int                          `yaml:"schema"`
 	Project       string                       `yaml:"project,omitempty"`
 	Language      string                       `yaml:"language,omitempty"`
