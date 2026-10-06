@@ -50,3 +50,5 @@ obj-*/
 *.buildinfo
 *.changes
 forgekit
+/11.md
+AGENTS.md
