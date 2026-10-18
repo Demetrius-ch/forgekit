@@ -88,3 +88,51 @@ func TestInvalidFormatIsRejected(t *testing.T) {
 		t.Fatalf("expected invalid format error, got %v", err)
 	}
 }
+
+func TestDetectTestsIgnoresDependencyDirectories(t *testing.T) {
+	root := t.TempDir()
+	dep := filepath.Join(root, "node_modules", "lib", "index.test.js")
+	if err := os.MkdirAll(filepath.Dir(dep), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dep, []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	findings, err := detectTests(root, "javascript")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if findings[0].ID != "tests.missing" {
+		t.Fatalf("tests inside node_modules must not count, got %s", findings[0].ID)
+	}
+
+	own := filepath.Join(root, "tests", "health.test.js")
+	if err := os.MkdirAll(filepath.Dir(own), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(own, []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	findings, err = detectTests(root, "javascript")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if findings[0].ID != "tests.present" {
+		t.Fatalf("expected project tests to be detected, got %s", findings[0].ID)
+	}
+}
+
+func TestModuleLabel(t *testing.T) {
+	tests := map[projectconfig.Language]string{
+		projectconfig.LanguageGo:         "Module Go",
+		projectconfig.LanguageTypeScript: "Package npm",
+		projectconfig.LanguageJavaScript: "Package npm",
+		projectconfig.LanguagePython:     "Package Python",
+	}
+	for language, want := range tests {
+		if got := moduleLabel(language); got != want {
+			t.Errorf("moduleLabel(%q) = %q, want %q", language, got, want)
+		}
+	}
+}

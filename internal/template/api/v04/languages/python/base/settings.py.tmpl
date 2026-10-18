@@ -11,7 +11,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "{{ if eq .ProjectConfig.Database "postgres" }}postgresql://postgres:postgres@localhost:5432/{{ .DatabaseName }}{{ else if eq .ProjectConfig.Database "mysql" }}mysql://root:root@localhost:3306/{{ .DatabaseName }}{{ else if eq .ProjectConfig.Database "sqlite" }}sqlite:///./{{ .DatabaseName }}.db{{ else }}{{ end }}"
 
-    JWT_SECRET_KEY: str = "your-secret-key-change-in-production"
+    # No default: set JWT_SECRET_KEY in the environment or .env (see auth/jwt.py)
+    JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_MINUTES: int = 30
 

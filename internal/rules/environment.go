@@ -112,7 +112,7 @@ func (PythonVersionRule) Run(_ context.Context, rctx Context) ([]report.Finding,
 	if rctx.Language != "python" {
 		return nil, nil
 	}
-	out, err := exec.Command("python3", "--version").CombinedOutput()
+	out, err := runFirstAvailable([]string{"python3", "python"}, "--version")
 	if err != nil {
 		return []report.Finding{{
 			ID: "env.python.version", Category: "environment", Severity: report.SeverityError,
@@ -140,7 +140,7 @@ func (PipRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
 	if rctx.Language != "python" {
 		return nil, nil
 	}
-	out, err := exec.Command("pip3", "--version").CombinedOutput()
+	out, err := runFirstAvailable([]string{"python3", "python"}, "-m", "pip", "--version")
 	if err != nil {
 		return []report.Finding{{
 			ID: "env.pip", Category: "environment", Severity: report.SeverityError,
@@ -151,6 +151,17 @@ func (PipRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
 		ID: "env.pip", Category: "pass", Severity: report.SeverityInfo,
 		Message: "pip " + strings.TrimSpace(string(out)),
 	}}, nil
+}
+
+// runFirstAvailable runs the first of names found on PATH with args. Python is
+// installed as python3 on Unix and often only as python on Windows.
+func runFirstAvailable(names []string, args ...string) ([]byte, error) {
+	for _, name := range names {
+		if path, err := exec.LookPath(name); err == nil {
+			return exec.Command(path, args...).CombinedOutput()
+		}
+	}
+	return nil, fmt.Errorf("aucun de %v trouvé dans le PATH", names)
 }
 
 type GitRule struct{}

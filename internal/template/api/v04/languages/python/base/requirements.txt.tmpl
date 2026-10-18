@@ -5,3 +5,16 @@ python-dotenv>=1.0.0
 python-multipart>=0.0.5
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
+{{- if eq .ProjectConfig.Database "postgres" }}
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.9
+{{- else if eq .ProjectConfig.Database "mysql" }}
+aiomysql>=0.2.0
+pymysql>=1.1.0
+{{- else if eq .ProjectConfig.Database "sqlite" }}
+aiosqlite>=0.19.0
+{{- end }}
+{{- if eq .ProjectConfig.Authentication "jwt" }}
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+{{- end }}

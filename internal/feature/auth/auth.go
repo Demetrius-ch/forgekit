@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/Demetrius-ch/forgekit/internal/feature"
@@ -166,15 +165,7 @@ func (AuthFeature) Remove(ctx context.Context, project feature.ProjectContext, p
 	}
 
 	// Remove dependencies from go.mod
-	for _, dep := range plan.Dependencies {
-		cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
-		cmd.Dir = project.Root
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			// Log but continue - dependency might not be in go.mod
-		}
-	}
+	feature.DropDependencies(project.Root, plan.Dependencies)
 
 	// Run go mod tidy
 	if err := feature.RunGoModTidy(project.Root); err != nil {

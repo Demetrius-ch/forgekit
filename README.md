@@ -268,7 +268,10 @@ forgekit init my-api --language python --non-interactive
 - SQLAlchemy ORM for database access
 - pip for dependency management
 - pytest for testing
-- Virtual environment (.venv) auto-creation
+- Virtual environment (.venv) auto-creation, with runtime and test dependencies
+  installed from `requirements-dev.txt` (works with `python3`, or `python` on Windows)
+- With `--auth jwt`, tokens are refused until `JWT_SECRET_KEY` is set (TypeScript/JavaScript: `JWT_SECRET`);
+  no default secret is embedded in the generated code
 
 ---
 

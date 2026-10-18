@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -661,7 +660,7 @@ func selectDatabase(
 					CreateNew:    true,
 				}, nil
 			case 2:
-				return selectExistingDatabase(g, inspector, databases, ctx, nonInteractive)
+				return selectExistingDatabase(g, inspector, databases, ctx, nonInteractive, projectName)
 			case 3:
 				return DatabaseSelection{}, fmt.Errorf("opération annulée par l'utilisateur")
 			default:
@@ -705,7 +704,7 @@ func selectDatabase(
 	case 1:
 		return askExternalDatabase(g, requestedDBName, requestedDBName)
 	case 2:
-		return selectExistingDatabase(g, inspector, databases, ctx, nonInteractive)
+		return selectExistingDatabase(g, inspector, databases, ctx, nonInteractive, projectName)
 	case 3:
 		return DatabaseSelection{}, fmt.Errorf("opération annulée par l'utilisateur")
 	default:
@@ -720,6 +719,7 @@ func selectExistingDatabase(
 	databases []dbinspect.DatabaseInfo,
 	ctx context.Context,
 	nonInteractive bool,
+	projectName string,
 ) (DatabaseSelection, error) {
 	if len(databases) == 0 {
 		return DatabaseSelection{}, fmt.Errorf("aucune base existante disponible")
@@ -816,7 +816,7 @@ func selectExistingDatabase(
 		fmt.Fprintln(os.Stdout)
 		fmt.Fprintf(os.Stdout, "⚠ Cette base contient déjà des données.\n\n")
 		fmt.Fprintf(os.Stdout, "Base : %s\n", selectedDB.Name)
-		fmt.Fprintf(os.Stdout, "Projet : %s\n\n", "forge-project") // TODO: pass project name
+		fmt.Fprintf(os.Stdout, "Projet : %s\n\n", projectName)
 		if len(state.Pending) > 0 {
 			fmt.Fprintln(os.Stdout, "Les migrations compatibles suivantes seront appliquées :")
 			for _, mig := range state.Pending {
@@ -1305,33 +1305,24 @@ func printCiSummary(out io.Writer, res report.Result) {
 	}
 }
 
-// detectTests returns findings about tests presence.
+// detectTests returns findings about tests presence. Dependency and VCS
+// directories are skipped: they ship their own tests, which say nothing about
+// the project.
 func detectTests(root string, language string) ([]report.Finding, error) {
 	hasTests := false
 	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
 			return nil
 		}
-		name := d.Name()
-		// Go tests
-		if strings.HasSuffix(name, "_test.go") {
-			hasTests = true
-			return filepath.SkipDir
+		if d.IsDir() {
+			if p != root && snapshotSkipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
 		}
-		// TypeScript/JavaScript tests
-		if strings.HasSuffix(name, ".test.ts") || strings.HasSuffix(name, ".test.js") ||
-			strings.HasSuffix(name, ".spec.ts") || strings.HasSuffix(name, ".spec.js") {
+		if isTestFile(d.Name()) {
 			hasTests = true
-			return filepath.SkipDir
-		}
-		// Python tests
-		if strings.HasPrefix(name, "test_") && strings.HasSuffix(name, ".py") {
-			hasTests = true
-			return filepath.SkipDir
-		}
-		if strings.HasSuffix(name, "_test.py") {
-			hasTests = true
-			return filepath.SkipDir
+			return filepath.SkipAll
 		}
 		return nil
 	})
@@ -1339,6 +1330,21 @@ func detectTests(root string, language string) ([]report.Finding, error) {
 		return []report.Finding{{ID: "tests.present", Category: "tests", Severity: report.SeverityInfo, Message: "Tests détectés"}}, nil
 	}
 	return []report.Finding{{ID: "tests.missing", Category: "tests", Severity: report.SeverityWarning, Message: "Aucun test détecté"}}, nil
+}
+
+// isTestFile reports whether name is a Go, TypeScript/JavaScript or Python test file.
+func isTestFile(name string) bool {
+	switch {
+	case strings.HasSuffix(name, "_test.go"):
+		return true
+	case strings.HasSuffix(name, ".test.ts"), strings.HasSuffix(name, ".test.js"),
+		strings.HasSuffix(name, ".spec.ts"), strings.HasSuffix(name, ".spec.js"):
+		return true
+	case strings.HasPrefix(name, "test_") && strings.HasSuffix(name, ".py"),
+		strings.HasSuffix(name, "_test.py"):
+		return true
+	}
+	return false
 }
 
 // detectDocs checks README.md and .env.example
@@ -2333,15 +2339,7 @@ func fallbackRemove(ctx context.Context, project feature.ProjectContext, plan fe
 
 	// Remove dependencies from go.mod (Go projects only)
 	if project.Language == feature.LanguageGo {
-		for _, dep := range plan.Dependencies {
-			cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
-			cmd.Dir = project.Root
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				// Log but continue
-			}
-		}
+		feature.DropDependencies(project.Root, plan.Dependencies)
 
 		if err := feature.RunGoModTidy(project.Root); err != nil {
 			return fmt.Errorf("go mod tidy : %w", err)

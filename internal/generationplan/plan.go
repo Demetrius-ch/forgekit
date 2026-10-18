@@ -397,6 +397,7 @@ func PythonRegistry() Registry {
 			name: "base",
 			files: files("base",
 				"v04/languages/python/base/requirements.txt.tmpl", "requirements.txt",
+				"v04/languages/python/base/requirements-dev.txt.tmpl", "requirements-dev.txt",
 				"v04/languages/python/base/pyproject.toml.tmpl", "pyproject.toml",
 				"v04/languages/python/base/.env.example.tmpl", ".env.example",
 				"v04/languages/python/base/.gitignore.tmpl", ".gitignore",

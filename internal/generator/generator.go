@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/Demetrius-ch/forgekit/internal/engine"
@@ -202,8 +203,13 @@ func (g *Generator) initNpmProject(dir string) error {
 }
 
 func (g *Generator) initPythonProject(dir string) error {
+	python, err := pythonCommand()
+	if err != nil {
+		return err
+	}
+
 	// Create virtual environment
-	cmd := exec.Command("python3", "-m", "venv", ".venv")
+	cmd := exec.Command(python, "-m", "venv", ".venv")
 	cmd.Dir = dir
 
 	out, err := cmd.CombinedOutput()
@@ -211,8 +217,9 @@ func (g *Generator) initPythonProject(dir string) error {
 		return fmt.Errorf("create venv: %s: %w", trimOutput(string(out)), err)
 	}
 
-	// Install dependencies
-	cmd = exec.Command(".venv/bin/pip", "install", "-r", "requirements.txt")
+	// Install runtime and test dependencies with the venv's own interpreter,
+	// whose location differs between Windows and Unix.
+	cmd = exec.Command(venvPython(dir, runtime.GOOS), "-m", "pip", "install", "-r", "requirements-dev.txt")
 	cmd.Dir = dir
 
 	out, err = cmd.CombinedOutput()
@@ -221,6 +228,25 @@ func (g *Generator) initPythonProject(dir string) error {
 	}
 
 	return nil
+}
+
+// pythonCommand returns the Python 3 interpreter found on PATH: python3 on
+// Unix, python on Windows installations that do not provide python3.
+func pythonCommand() (string, error) {
+	for _, name := range []string{"python3", "python"} {
+		if path, err := exec.LookPath(name); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("Python 3 introuvable : installez Python 3 et vérifiez que python3 (ou python sous Windows) est dans le PATH")
+}
+
+// venvPython returns the interpreter of the .venv virtual environment in dir.
+func venvPython(dir, goos string) string {
+	if goos == "windows" {
+		return filepath.Join(dir, ".venv", "Scripts", "python.exe")
+	}
+	return filepath.Join(dir, ".venv", "bin", "python")
 }
 
 // PostProcessProject formats Go sources and runs the test suite for the generated project.
@@ -295,9 +321,13 @@ func (g *Generator) PostProcessProject(dir string) error {
 			return fmt.Errorf("parcourir le projet : %w", err)
 		}
 
+		python, err := pythonCommand()
+		if err != nil {
+			return err
+		}
 		// Syntax check using python -m py_compile
 		for _, file := range files {
-			cmd := exec.Command("python3", "-m", "py_compile", file)
+			cmd := exec.Command(python, "-m", "py_compile", file)
 			cmd.Dir = dir
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return fmt.Errorf("python syntax check %s : %s: %w", file, trimOutput(string(out)), err)
