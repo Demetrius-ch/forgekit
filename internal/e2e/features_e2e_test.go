@@ -94,8 +94,7 @@ func TestAddFeaturesAllArchitecturesE2E(t *testing.T) {
 			run(t, target, "go", "vet", "./...")
 			run(t, target, "go", "test", "./...")
 
-			// Dependents first: swagger needs cors, cors and logging need auth.
-			for _, f := range []string{"swagger", "cors", "logging", "auth"} {
+			for _, f := range features {
 				run(t, target, bin, "remove", f, "--quiet")
 			}
 			run(t, target, "go", "build", "./...")
@@ -120,8 +119,8 @@ func TestRollbackRestoresProjectE2E(t *testing.T) {
 		"--quiet",
 	)
 
-	// A router ForgeKit cannot integrate with: logging fails after auth (its
-	// dependency) has been fully installed and logging's own files written.
+	// A router ForgeKit cannot integrate with: logging fails after its own files
+	// were written and go.mod / .env.example updated.
 	routerPath := filepath.Join(target, "internal", "transport", "http", "router.go")
 	router, err := os.ReadFile(routerPath)
 	if err != nil {
@@ -141,6 +140,51 @@ func TestRollbackRestoresProjectE2E(t *testing.T) {
 
 	if after := treeDigest(t, target); after != before {
 		t.Fatalf("project not restored after failed install\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+	run(t, target, "go", "build", "./...")
+}
+
+// TestAddRefusesToOverwriteE2E checks that forge add keeps a user file the
+// feature would create, unless --force is given.
+func TestAddRefusesToOverwriteE2E(t *testing.T) {
+	root := t.TempDir()
+	bin := buildForge(t, root)
+	project := "overwrite-guard"
+	target := filepath.Join(root, project)
+	run(t, root, bin, "init", project,
+		"--non-interactive",
+		"--module", "github.com/forgekit/"+project,
+		"--database", "none",
+		"--docker=false",
+		"--quiet",
+	)
+
+	userFile := filepath.Join(target, "internal", "cors", "cors.go")
+	const userContent = "package cors\n\n// user code\n"
+	if err := os.MkdirAll(filepath.Dir(userFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(userFile, []byte(userContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := treeDigest(t, target)
+
+	cmd := exec.Command(bin, "add", "cors", "--quiet")
+	cmd.Dir = target
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("forge add cors should refuse to overwrite %s: %s", userFile, out)
+	}
+	if !strings.Contains(string(out), "--force") {
+		t.Fatalf("error should mention --force: %s", out)
+	}
+	if after := treeDigest(t, target); after != before {
+		t.Fatalf("project modified although installation was refused")
+	}
+
+	run(t, target, bin, "add", "cors", "--force", "--quiet")
+	if data, _ := os.ReadFile(userFile); string(data) == userContent {
+		t.Fatal("--force should replace the existing file")
 	}
 	run(t, target, "go", "build", "./...")
 }

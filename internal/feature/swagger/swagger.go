@@ -28,7 +28,7 @@ func (SwaggerFeature) Version() string {
 
 // DependsOn returns the list of features this feature depends on.
 func (SwaggerFeature) DependsOn() []string {
-	return []string{"cors"}
+	return []string{}
 }
 
 func (SwaggerFeature) Check(ctx context.Context, project feature.ProjectContext) error {

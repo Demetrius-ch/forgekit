@@ -43,15 +43,17 @@ func TestFullWorkflowE2E(t *testing.T) {
 	}
 	t.Log("✓ forge init succeeded")
 
-	// Step 2: forge add cors (will auto-install auth as dependency)
-	t.Log("Step 2: forge add cors (auto-installs auth)")
-	addCors := exec.Command(bin, "add", "cors")
-	addCors.Dir = target
-	out, err = addCors.CombinedOutput()
-	if err != nil {
-		t.Fatalf("forge add cors: %s: %v", out, err)
+	// Step 2: forge add auth, then cors (features are independent)
+	t.Log("Step 2: forge add auth, forge add cors")
+	for _, f := range []string{"auth", "cors"} {
+		add := exec.Command(bin, "add", f)
+		add.Dir = target
+		out, err = add.CombinedOutput()
+		if err != nil {
+			t.Fatalf("forge add %s: %s: %v", f, out, err)
+		}
 	}
-	t.Log("✓ forge add cors succeeded (with auth dependency)")
+	t.Log("✓ forge add auth and cors succeeded")
 
 	// Step 4: go test
 	t.Log("Step 4: go test ./...")
@@ -205,21 +207,8 @@ func TestFullWorkflowE2E(t *testing.T) {
 	}
 	t.Log("✓ forge analyze --ci --format json succeeded")
 
-	// Step 13: forge remove auth (should fail due to cors dependency)
-	t.Log("Step 13: forge remove auth (should fail - cors depends on it)")
-	removeAuth := exec.Command(bin, "remove", "auth")
-	removeAuth.Dir = target
-	out, err = removeAuth.CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected error for removing auth while cors depends on it, got: %s", out)
-	}
-	if !strings.Contains(string(out), "dépendantes installées") {
-		t.Fatalf("expected 'dépendantes installées' error, got: %s", out)
-	}
-	t.Log("✓ forge remove auth correctly rejected due to dependent feature")
-
-	// Step 14: forge remove cors
-	t.Log("Step 14: forge remove cors")
+	// Step 13: forge remove cors
+	t.Log("Step 13: forge remove cors")
 	removeCors := exec.Command(bin, "remove", "cors")
 	removeCors.Dir = target
 	out, err = removeCors.CombinedOutput()
@@ -231,9 +220,9 @@ func TestFullWorkflowE2E(t *testing.T) {
 	}
 	t.Log("✓ forge remove cors succeeded")
 
-	// Step 15: forge remove auth (now should succeed)
-	t.Log("Step 15: forge remove auth (now should succeed)")
-	removeAuth = exec.Command(bin, "remove", "auth")
+	// Step 14: forge remove auth
+	t.Log("Step 14: forge remove auth")
+	removeAuth := exec.Command(bin, "remove", "auth")
 	removeAuth.Dir = target
 	out, err = removeAuth.CombinedOutput()
 	if err != nil {
@@ -416,9 +405,9 @@ func TestErrorScenariosE2E(t *testing.T) {
 	}
 	t.Log("✓ Already installed feature handled idempotently")
 
-	// Test 3: Dependency resolution (cors depends on auth)
-	t.Log("Test 3: Dependency resolution")
-	// Remove auth (record and files) to simulate a missing dependency
+	// Test 3: Independent features (cors does not pull auth in)
+	t.Log("Test 3: Independent features")
+	// Remove auth (record and files) so that only cors can be installed
 	featuresYaml := filepath.Join(target, ".forge", "features.yaml")
 	if err := os.WriteFile(featuresYaml, []byte("features: []\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -426,25 +415,23 @@ func TestErrorScenariosE2E(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(target, "internal", "auth")); err != nil {
 		t.Fatal(err)
 	}
-	// Try to add cors without auth - should automatically install auth as dependency
 	addCors := exec.Command(bin, "add", "cors")
 	addCors.Dir = target
 	out, err = addCors.CombinedOutput()
 	if err != nil {
-		t.Fatalf("expected success for adding cors with auto dependency resolution, got: %s", out)
+		t.Fatalf("forge add cors: %s: %v", out, err)
 	}
-	// Verify both auth and cors are now installed
-	if !strings.Contains(string(out), "auth installé") {
-		t.Fatalf("expected auth to be installed as dependency: %s", out)
+	if strings.Contains(string(out), "auth installé") {
+		t.Fatalf("cors must not install auth: %s", out)
 	}
 	if !strings.Contains(string(out), "cors installé") {
 		t.Fatalf("expected cors to be installed: %s", out)
 	}
-	t.Log("✓ Dependency resolution correctly installs auth before cors")
-	// Verify features.yaml has both
+	t.Log("✓ cors installed on its own")
+	// Verify features.yaml has cors only
 	data, _ := os.ReadFile(featuresYaml)
-	if !strings.Contains(string(data), "auth") || !strings.Contains(string(data), "cors") {
-		t.Fatalf("features.yaml missing features: %s", string(data))
+	if strings.Contains(string(data), "auth") || !strings.Contains(string(data), "cors") {
+		t.Fatalf("features.yaml should list cors only: %s", string(data))
 	}
 
 	// Test 4: Invalid config (corrupted go.mod)
@@ -488,20 +475,14 @@ func TestErrorScenariosE2E(t *testing.T) {
 	}
 	t.Log("✓ Remove non-installed feature correctly rejected")
 
-	// Test 6: Remove with dependent feature installed (cors depends on auth)
-	t.Log("Test 6: Remove with dependent feature")
-	// Verify that auth and cors are both installed (from Test 3)
-	// Try to remove auth while cors is installed - should fail due to dependent feature
-	removeAuth = exec.Command(bin, "remove", "auth")
-	removeAuth.Dir = target
-	out, err = removeAuth.CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected error for removing auth while cors depends on it, got: %s", out)
+	// Test 6: Remove cors on its own (no feature depends on it)
+	t.Log("Test 6: Remove cors")
+	removeCors := exec.Command(bin, "remove", "cors")
+	removeCors.Dir = target
+	if out, err := removeCors.CombinedOutput(); err != nil {
+		t.Fatalf("forge remove cors: %s: %v", out, err)
 	}
-	if !strings.Contains(string(out), "dépendantes installées") {
-		t.Fatalf("expected 'dépendantes installées' error, got: %s", out)
-	}
-	t.Log("✓ Remove with dependent feature correctly rejected")
+	t.Log("✓ cors removed on its own")
 }
 
 // TestForgeScenariosE2E tests various .forge scenarios
@@ -752,6 +733,12 @@ func TestRemovePlanE2E(t *testing.T) {
 		t.Fatalf("forge init: %s: %v", out, err)
 	}
 
+	addAuth := exec.Command(bin, "add", "auth")
+	addAuth.Dir = target
+	if out, err := addAuth.CombinedOutput(); err != nil {
+		t.Fatalf("forge add auth: %s: %v", out, err)
+	}
+
 	addCors := exec.Command(bin, "add", "cors")
 	addCors.Dir = target
 	out, err = addCors.CombinedOutput()
@@ -781,18 +768,18 @@ func TestRemovePlanE2E(t *testing.T) {
 	}
 	t.Log("✓ forge remove cors --plan succeeded")
 
-	// Test 2: forge remove auth --plan (should fail due to cors dependency)
-	t.Log("Test 2: forge remove auth --plan (should show dependency warning)")
+	// Test 2: forge remove auth --plan (independent of cors)
+	t.Log("Test 2: forge remove auth --plan")
 	removeAuthPlan := exec.Command(bin, "remove", "auth", "--plan")
 	removeAuthPlan.Dir = target
 	out, err = removeAuthPlan.CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected error for removing auth while cors depends on it, got: %s", out)
+	if err != nil {
+		t.Fatalf("forge remove auth --plan: %s: %v", out, err)
 	}
-	if !strings.Contains(string(out), "dépendantes installées") {
-		t.Fatalf("expected dependency error in plan: %s", out)
+	if !strings.Contains(string(out), "internal/auth/jwt.go") {
+		t.Fatalf("missing file to remove in auth plan: %s", out)
 	}
-	t.Log("✓ forge remove auth --plan correctly rejected due to dependent feature")
+	t.Log("✓ forge remove auth --plan succeeded")
 
 	// Test 3: forge remove logging --plan (not installed)
 	t.Log("Test 3: forge remove logging --plan (not installed)")

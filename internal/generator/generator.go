@@ -36,9 +36,6 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	if err := ValidateProjectName(opts.ProjectName); err != nil {
 		return nil, err
 	}
-	if err := ValidateModulePath(opts.ModulePath); err != nil {
-		return nil, err
-	}
 	if err := ValidateHTTPPort(opts.HTTPPort); err != nil {
 		return nil, err
 	}
@@ -63,6 +60,9 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	}
 	if err := projectConfig.Validate(); err != nil {
 		return nil, fmt.Errorf("validate project configuration: %w", err)
+	}
+	if err := ValidateModulePathFor(projectConfig.Language, opts.ModulePath); err != nil {
+		return nil, err
 	}
 
 	data := template.Data{
@@ -345,6 +345,39 @@ func ValidateModulePath(module string) error {
 		return fmt.Errorf("le chemin du module doit être au format github.com/owner/name")
 	}
 	return nil
+}
+
+var (
+	npmPackageName    = regexp.MustCompile(`^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$`)
+	pythonPackageName = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$`)
+)
+
+// ValidateModulePathFor validates the project identifier of the given language:
+// a Go module path, an npm package name, or a Python (PEP 508) package name.
+// For npm and Python, a Go-style module path is still accepted: it was the only
+// form allowed before and generated npm/Python files do not use it.
+func ValidateModulePathFor(language projectconfig.Language, module string) error {
+	module = strings.TrimSpace(module)
+	switch language {
+	case projectconfig.LanguageTypeScript, projectconfig.LanguageJavaScript:
+		if ValidateModulePath(module) == nil {
+			return nil
+		}
+		if len(module) > 214 || !npmPackageName.MatchString(module) {
+			return fmt.Errorf("nom de package npm invalide %q : minuscules, chiffres, '-', '.', '_' ou '~', éventuellement préfixé par @scope/", module)
+		}
+		return nil
+	case projectconfig.LanguagePython:
+		if ValidateModulePath(module) == nil {
+			return nil
+		}
+		if !pythonPackageName.MatchString(module) {
+			return fmt.Errorf("nom de package Python invalide %q : lettres, chiffres, '-', '.' ou '_', commençant et finissant par une lettre ou un chiffre", module)
+		}
+		return nil
+	default:
+		return ValidateModulePath(module)
+	}
 }
 
 func ValidateHTTPPort(port int) error {

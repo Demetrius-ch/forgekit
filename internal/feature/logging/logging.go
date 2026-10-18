@@ -26,7 +26,7 @@ func (LoggingFeature) Version() string {
 
 // DependsOn returns the list of features this feature depends on.
 func (LoggingFeature) DependsOn() []string {
-	return []string{"auth"}
+	return []string{}
 }
 
 func (LoggingFeature) Check(ctx context.Context, project feature.ProjectContext) error {

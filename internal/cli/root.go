@@ -115,6 +115,15 @@ func defaultModulePath(projectName string) string {
 	return fmt.Sprintf("github.com/%s/%s", user, projectName)
 }
 
+// defaultModulePathFor returns the default module path (Go) or package name
+// (npm, Python) of a new project.
+func defaultModulePathFor(language projectconfig.Language, projectName string) string {
+	if language == "" || language == projectconfig.LanguageGo {
+		return defaultModulePath(projectName)
+	}
+	return projectName
+}
+
 func defaultDatabaseName(projectName string) string {
 	return strings.ReplaceAll(projectName, "-", "_")
 }

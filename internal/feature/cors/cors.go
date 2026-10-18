@@ -27,7 +27,7 @@ func (CorsFeature) Version() string {
 
 // DependsOn returns the list of features this feature depends on.
 func (CorsFeature) DependsOn() []string {
-	return []string{"auth"}
+	return []string{}
 }
 
 func (CorsFeature) Check(ctx context.Context, project feature.ProjectContext) error {

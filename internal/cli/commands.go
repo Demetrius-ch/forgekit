@@ -76,6 +76,7 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 			}
 
 			selectedDatabase := projectconfig.Database(database)
+			selectedLanguage := projectconfig.Language(language)
 			if configFile != "" {
 				fileConfiguration, loadErr := projectconfig.LoadFile(configFile)
 				if loadErr != nil {
@@ -83,6 +84,9 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				}
 				if fileConfiguration.Database != "" {
 					selectedDatabase = fileConfiguration.Database
+				}
+				if fileConfiguration.Language != "" && !cmd.Flags().Changed("language") {
+					selectedLanguage = fileConfiguration.Language
 				}
 			}
 
@@ -129,21 +133,35 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				ExternalDBName:     dbSelection.ExternalDBName,
 			}
 
+			// The language is asked first in interactive mode: the module (Go) or
+			// package name (npm, Python) prompt and its validation depend on it.
+			languageAsked := false
 			if nonInteractive || dryRun {
 				opts.ModulePath = modulePath
 				if opts.ModulePath == "" {
-					opts.ModulePath = defaultModulePath(projectName)
+					opts.ModulePath = defaultModulePathFor(selectedLanguage, projectName)
 				}
 			} else {
 				p := prompt.New(os.Stdin, os.Stdout)
 				fmt.Fprintf(os.Stdout, "\nConfiguration du projet %q\n\n", projectName)
+				if configFile == "" {
+					if language, err = p.AskString("Langage (go, typescript, javascript, python)", language); err != nil {
+						return err
+					}
+					selectedLanguage = projectconfig.Language(language)
+					languageAsked = true
+				}
 				moduleLabel := "Chemin du module Go"
-				if projectconfig.Language(language) == projectconfig.LanguagePython {
+				if selectedLanguage == projectconfig.LanguagePython {
 					moduleLabel = "Nom du package Python"
-				} else if projectconfig.Language(language) == projectconfig.LanguageTypeScript || projectconfig.Language(language) == projectconfig.LanguageJavaScript {
+				} else if selectedLanguage == projectconfig.LanguageTypeScript || selectedLanguage == projectconfig.LanguageJavaScript {
 					moduleLabel = "Nom du package npm"
 				}
-				module, err := p.AskString(moduleLabel, defaultModulePath(projectName))
+				defaultModule := modulePath
+				if defaultModule == "" {
+					defaultModule = defaultModulePathFor(selectedLanguage, projectName)
+				}
+				module, err := p.AskString(moduleLabel, defaultModule)
 				if err != nil {
 					return err
 				}
@@ -166,9 +184,6 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				}
 			}
 
-			if err := generator.ValidateModulePath(opts.ModulePath); err != nil {
-				return err
-			}
 			if err := generator.ValidateHTTPPort(opts.HTTPPort); err != nil {
 				return err
 			}
@@ -187,7 +202,7 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 					return err
 				}
 			}
-			if cmd.Flags().Changed("language") {
+			if cmd.Flags().Changed("language") || languageAsked {
 				projectConfiguration.Language = projectconfig.Language(language)
 				if projectConfiguration.Language == projectconfig.LanguageTypeScript || projectConfiguration.Language == projectconfig.LanguageJavaScript {
 					projectConfiguration.Runtime = projectconfig.RuntimeNode
@@ -218,15 +233,6 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 			}
 			if !nonInteractive && !dryRun && configFile == "" {
 				p := prompt.New(os.Stdin, os.Stdout)
-				if language, err = p.AskString("Langage (go, typescript, javascript, python)", string(projectConfiguration.Language)); err != nil {
-					return err
-				}
-				projectConfiguration.Language = projectconfig.Language(language)
-				if projectConfiguration.Language == projectconfig.LanguageTypeScript || projectConfiguration.Language == projectconfig.LanguageJavaScript {
-					projectConfiguration.Runtime = projectconfig.RuntimeNode
-				} else {
-					projectConfiguration.Runtime = projectconfig.RuntimeNone
-				}
 				if architecture, err = p.AskString("Architecture (hexagonal, clean, layered)", string(projectConfiguration.Architecture)); err != nil {
 					return err
 				}
@@ -262,6 +268,9 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				projectConfiguration.CI = projectconfig.CIStrategy(ciStrategy)
 			}
 			if err := projectConfiguration.Validate(); err != nil {
+				return err
+			}
+			if err := generator.ValidateModulePathFor(projectConfiguration.Language, opts.ModulePath); err != nil {
 				return err
 			}
 			opts.ProjectConfig = projectConfiguration
@@ -1641,6 +1650,7 @@ func newAddCommand(g *globalFlags) *cobra.Command {
 	var list bool
 	var dryRun bool
 	var showPlan bool
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "add [feature]",
@@ -1666,7 +1676,7 @@ func newAddCommand(g *globalFlags) *cobra.Command {
 				return runFeatureList(g, registry)
 			}
 
-			return runFeatureAdd(g, registry, args[0], dryRun, showPlan)
+			return runFeatureAdd(g, registry, args[0], dryRun, showPlan, force)
 		},
 	}
 
@@ -1689,6 +1699,13 @@ func newAddCommand(g *globalFlags) *cobra.Command {
 		"plan",
 		false,
 		"Afficher le plan d'installation détaillé (fichiers à créer/modifier/supprimer, conflits, dépendances)",
+	)
+
+	cmd.Flags().BoolVar(
+		&force,
+		"force",
+		false,
+		"Remplacer les fichiers existants que la feature doit créer",
 	)
 
 	return cmd
@@ -1790,6 +1807,7 @@ func runFeatureAdd(
 	name string,
 	dryRun bool,
 	showPlan bool,
+	force bool,
 ) error {
 	console := g.console()
 
@@ -1947,6 +1965,18 @@ func runFeatureAdd(
 		return printFeaturePlan(g, plan, dryRun, showPlan)
 	}
 
+	// Refuse to overwrite existing files unless --force is given: they may hold
+	// user changes that nothing would preserve once the installation succeeds.
+	if !force {
+		existing, err := existingPlanFiles(ctx, project, featuresToInstall, alreadyPresent)
+		if err != nil {
+			return err
+		}
+		if len(existing) > 0 {
+			return fmt.Errorf("fichiers existants qui seraient écrasés : %s ; relancez avec --force pour les remplacer", strings.Join(existing, ", "))
+		}
+	}
+
 	// Step 6: Install all features in order (dependencies first)
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
@@ -2018,6 +2048,30 @@ func runFeatureAdd(
 	}
 
 	return nil
+}
+
+// existingPlanFiles lists the files the given features would create that
+// already exist in the project.
+func existingPlanFiles(ctx context.Context, project feature.ProjectContext, features []feature.Feature, skip map[string]bool) ([]string, error) {
+	var existing []string
+	for _, feat := range features {
+		if skip[feat.Name()] {
+			continue
+		}
+		plan, err := feat.Plan(ctx, project)
+		if err != nil {
+			return nil, fmt.Errorf("construction du plan pour %q : %w", feat.Name(), err)
+		}
+		for _, file := range plan.Files {
+			if file.Action != feature.FileActionCreate {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(project.Root, file.Destination)); err == nil {
+				existing = append(existing, file.Destination)
+			}
+		}
+	}
+	return existing, nil
 }
 
 func runFeatureRemove(
