@@ -945,18 +945,14 @@ The `.forge/` directory tracks project metadata and installed features:
 
 ## Rollback System
 
-ForgeKit includes a rollback mechanism to restore project state when feature installation fails.
+ForgeKit includes a rollback mechanism to restore project state when `forge add` or `forge remove` fails.
 
 ### How it works
 
-1. **Before installation**: A complete snapshot is taken of:
-   - `go.mod` and `go.sum`
-   - `.env.example`
-   - `.forge/` directory (metadata and features.yaml)
-
-2. **On failure**: Automatic rollback restores all captured files
-
-3. **Verification**: Post-rollback verification ensures state matches the snapshot
+1. **Before installation or removal**: the whole project tree is captured in memory
+   (every file except `.git/`, `vendor/`, `node_modules/` and `.venv/`; files larger than 4 MiB are not captured and are never deleted).
+2. **On failure**: modified files are rewritten, deleted files are recreated, and files or directories created in the meantime are removed.
+   When several features are installed at once (dependencies), all of them are rolled back together.
 
 ### Capabilities
 
@@ -964,29 +960,26 @@ ForgeKit includes a rollback mechanism to restore project state when feature ins
 |-------------|-----------------|
 | `go.mod` / `go.sum` content | Go module cache (GOMODCACHE) |
 | `.env.example` file content | Docker container state |
-| `.forge/forge.yaml` metadata | External databases |
-| `.forge/features.yaml` installed features | Git history |
-| Feature-generated files (`internal/*`) | System packages (apt/brew) |
-| | gofmt whitespace changes |
+| `.forge/` metadata and installed features | External databases |
+| Files created by the feature (`internal/*`) | Git history |
+| Changes to `main.go` and the router | System packages (apt/brew) |
+| `gofmt` changes to project files | Files larger than 4 MiB, `.git/`, `vendor/`, `node_modules/`, `.venv/` |
 
 ### Limitations
 
-- **Not transactional**: External operations (`go get`, `go mod tidy`, Docker) cannot be fully undone
+- **Not transactional across processes**: if ForgeKit itself is killed during an installation, no rollback happens — commit your work before running `forge add`/`forge remove`
 - **Module cache**: `go get` downloads modules to GOMODCACHE which persists
 - **Docker**: Container state, volumes, and networks are not managed
 - **External services**: PostgreSQL databases, Redis, etc. are outside ForgeKit's control
-- **Git**: Commits, tags, branches are not modified by ForgeKit
 
 ### Manual rollback
 
-If automatic rollback fails, restore from snapshot:
+If the automatic rollback reports an error, use version control to restore the project:
 
 ```bash
-# Manual restoration from backups
-cp go.mod.bak go.mod
-cp go.sum.bak go.sum
-rm -rf .forge
-# Then restore from your backups
+git status          # review what changed
+git restore .       # restore tracked files
+git clean -nd       # list untracked files ForgeKit created, then remove them with git clean -fd
 ```
 
 ---

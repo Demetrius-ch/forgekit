@@ -42,19 +42,17 @@ func (AuthFeature) Check(ctx context.Context, project feature.ProjectContext) er
 		return fmt.Errorf("vérifier l'installation existante : %w", err)
 	}
 	if installed {
-		return fmt.Errorf("auth version %s déjà installée", existing.Version)
+		return fmt.Errorf("auth version %s %w", existing.Version, feature.ErrAlreadyInstalled)
 	}
 
-	// Check if project has required structure
-	requiredPaths := []string{
-		filepath.Join(project.Root, "internal", "transport", "http", "router.go"),
-		filepath.Join(project.Root, "go.mod"),
+	if err := feature.CheckGoHTTPProject(project.Root, false); err != nil {
+		return err
 	}
 
-	for _, p := range requiredPaths {
-		if _, err := os.Stat(p); err != nil {
-			return fmt.Errorf("fichier requis manquant : %s", p)
-		}
+	// Projects created with `forge init --auth jwt` already ship internal/auth;
+	// overwriting it would break the router that uses it.
+	if entries, err := filepath.Glob(filepath.Join(project.Root, "internal", "auth", "*.go")); err == nil && len(entries) > 0 {
+		return fmt.Errorf("auth : internal/auth existe déjà dans le projet, %w", feature.ErrAlreadyInstalled)
 	}
 
 	return nil

@@ -11,9 +11,12 @@ import (
 type RouterIntegration struct {
 	ModulePath      string
 	ImportPath      string
-	MiddlewareCall  string
+	MiddlewareCall  string // Statement inserted in the router, e.g. r.Use(cors.Middleware())
 	MiddlewareCheck string // String to check if already integrated
-	RouterPath      string // Optional: explicit path to router.go (auto-detected if empty)
+	// IsRoute marks route registrations (e.g. swagger.RegisterRoutes(r)): they are
+	// inserted before the final "return r" so that every middleware precedes them.
+	IsRoute    bool
+	RouterPath string // Optional: explicit path to router.go (auto-detected if empty)
 }
 
 // MainIntegration holds the configuration for integrating a feature into main.go
@@ -64,6 +67,27 @@ func findMainPath(projectRoot string) string {
 	return ""
 }
 
+// RouterPath returns the router file of a supported Go layout, or "" if none is found.
+func RouterPath(projectRoot string) string {
+	return findRouterPath(projectRoot)
+}
+
+// CheckGoHTTPProject verifies that projectRoot is a Go project with a router
+// (any supported architecture) and, when requireMain is set, a server entry point.
+func CheckGoHTTPProject(projectRoot string, requireMain bool) error {
+	goMod := filepath.Join(projectRoot, "go.mod")
+	if _, err := os.Stat(goMod); err != nil {
+		return fmt.Errorf("fichier requis manquant : %s", goMod)
+	}
+	if findRouterPath(projectRoot) == "" {
+		return fmt.Errorf("router introuvable dans le projet (architectures supportées: hexagonal, clean, layered)")
+	}
+	if requireMain && findMainPath(projectRoot) == "" {
+		return fmt.Errorf("main.go introuvable dans le projet (attendu : cmd/server/main.go)")
+	}
+	return nil
+}
+
 // resolveRouterPath returns the explicit path or auto-detects it.
 func resolveRouterPath(projectRoot string, integration RouterIntegration) (string, error) {
 	if integration.RouterPath != "" {
@@ -86,6 +110,29 @@ func resolveMainPath(projectRoot string, integration MainIntegration) (string, e
 	return "", fmt.Errorf("main.go introuvable dans le projet")
 }
 
+// addImport appends spec at the end of the first import block, i.e. in the
+// group holding the module's own imports. It reports false without a block.
+func addImport(src, spec string) (string, bool) {
+	start := strings.Index(src, "import (")
+	if start < 0 {
+		return src, false
+	}
+	end := strings.Index(src[start:], "\n)")
+	if end < 0 {
+		return src, false
+	}
+	end += start
+	return src[:end] + "\n\t" + spec + src[end:], true
+}
+
+// routerAnchors are the lines after which feature statements are inserted, in
+// order of preference: the v0.3 middleware stack, then the router creation used
+// by every v0.4 architecture.
+var routerAnchors = []string{
+	`r.Use(middleware.Timeout(30 * time.Second))`,
+	`r := chi.NewRouter()`,
+}
+
 // IntegrateRouterGo safely integrates a feature into router.go
 // It handles multiple features by properly merging imports and middleware calls
 func IntegrateRouterGo(projectRoot string, integration RouterIntegration) error {
@@ -105,38 +152,32 @@ func IntegrateRouterGo(projectRoot string, integration RouterIntegration) error 
 		return nil // Already integrated
 	}
 
-	// 1. Add import if not present
-	if !strings.Contains(src, `"`+integration.ImportPath+`"`) {
-		importBlock := `import (`
-		newImport := importBlock + "\n\t" + `"` + integration.ImportPath + `"`
-		if strings.Contains(src, importBlock) {
-			src = strings.Replace(src, importBlock, newImport, 1)
-		} else {
-			return fmt.Errorf("bloc import introuvable dans router.go")
-		}
+	// 1. Add import
+	src, ok := addImport(src, `"`+integration.ImportPath+`"`)
+	if !ok {
+		return fmt.Errorf("bloc import introuvable dans router.go")
 	}
 
-	// 2. Add middleware after timeout middleware
-	// Find the timeout middleware line and add our middleware after it
-	timeoutMiddleware := `r.Use(middleware.Timeout(30 * time.Second))`
-	if strings.Contains(src, timeoutMiddleware) {
-		newMiddleware := timeoutMiddleware + "\n\t" + integration.MiddlewareCall
-		src = strings.Replace(src, timeoutMiddleware, newMiddleware, 1)
+	// 2. Insert the statement. Middlewares go right after a known anchor and
+	// routes right before "return r": chi panics when r.Use follows a route.
+	inserted := false
+	if integration.IsRoute {
+		const ret = "\n\treturn r\n"
+		if i := strings.LastIndex(src, ret); i >= 0 {
+			src = src[:i] + "\n\t" + integration.MiddlewareCall + src[i:]
+			inserted = true
+		}
 	} else {
-		// Fallback: try to find any r.Use and add after the first one
-		lines := strings.Split(src, "\n")
-		found := false
-		for i, line := range lines {
-			if strings.Contains(line, "r.Use(") && !strings.Contains(line, integration.MiddlewareCall) {
-				lines[i] = line + "\n\t" + integration.MiddlewareCall
-				found = true
+		for _, anchor := range routerAnchors {
+			if strings.Contains(src, anchor) {
+				src = strings.Replace(src, anchor, anchor+"\n\t"+integration.MiddlewareCall, 1)
+				inserted = true
 				break
 			}
 		}
-		if !found {
-			return fmt.Errorf("point d'intégration middleware introuvable dans router.go")
-		}
-		src = strings.Join(lines, "\n")
+	}
+	if !inserted {
+		return fmt.Errorf("point d'intégration middleware introuvable dans router.go")
 	}
 
 	if err := os.WriteFile(routerPath, []byte(src), 0o644); err != nil {
@@ -160,28 +201,17 @@ func RemoveRouterGo(projectRoot string, integration RouterIntegration) error {
 
 	src := string(content)
 
-	// 1. Remove the middleware call
-	// The middleware call is on its own line after the timeout middleware
-	middlewareLine := "\n\t" + integration.MiddlewareCall
-	if strings.Contains(src, middlewareLine) {
-		src = strings.Replace(src, middlewareLine, "", 1)
-	} else {
-		// Try alternative format (without leading newline)
-		altMiddlewareLine := integration.MiddlewareCall
-		if strings.Contains(src, altMiddlewareLine) {
-			// Find the line and remove it entirely
-			lines := strings.Split(src, "\n")
-			var newLines []string
-			for _, line := range lines {
-				trimmed := strings.TrimSpace(line)
-				if trimmed == altMiddlewareLine {
-					continue // Skip this line
-				}
-				newLines = append(newLines, line)
-			}
-			src = strings.Join(newLines, "\n")
+	// 1. Remove the statement. Matching on MiddlewareCheck also removes the
+	// forms written by earlier ForgeKit versions.
+	lines := strings.Split(src, "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if strings.Contains(line, integration.MiddlewareCheck) {
+			continue
 		}
+		kept = append(kept, line)
 	}
+	src = strings.Join(kept, "\n")
 
 	// 2. Remove the import if it exists
 	importPath := `"` + integration.ImportPath + `"`
@@ -272,7 +302,10 @@ func RemoveMainGo(projectRoot string, integration MainIntegration) error {
 	return nil
 }
 
-// IntegrateMainGo safely integrates a feature into main.go
+// IntegrateMainGo safely integrates a feature into main.go.
+// When the integration declares replacements and none of them matches, main.go
+// does not use the layout the feature targets: it is left untouched rather than
+// receiving an import nothing would use (which would break compilation).
 func IntegrateMainGo(projectRoot string, integration MainIntegration) error {
 	mainPath, err := resolveMainPath(projectRoot, integration)
 	if err != nil {
@@ -285,62 +318,34 @@ func IntegrateMainGo(projectRoot string, integration MainIntegration) error {
 
 	src := string(content)
 
-	// Check if already integrated
-	// For blank imports, check with both _ "path" and "path" prefixes
-	importCheck := `"` + integration.ImportPath + `"`
-	blankImportCheck := `_ "` + integration.ImportPath + `"`
-	if integration.BlankImport {
-		// Check for both blank and regular import formats
-		if strings.Contains(src, blankImportCheck) || strings.Contains(src, importCheck) {
-			return nil // Already integrated (either format)
-		}
-	} else {
-		if strings.Contains(src, importCheck) {
-			return nil // Already integrated
-		}
+	// Check if already integrated (either import format)
+	importSpec := `"` + integration.ImportPath + `"`
+	if strings.Contains(src, importSpec) {
+		return nil
 	}
 
-	// 1. Add import if not present
-	if integration.BlankImport {
-		// For blank import, add if neither format exists
-		if !strings.Contains(src, blankImportCheck) && !strings.Contains(src, importCheck) {
-			importBlock := `import (`
-			newImport := importBlock + "\n\t" + `_ "` + integration.ImportPath + `"`
-			if strings.Contains(src, importBlock) {
-				src = strings.Replace(src, importBlock, newImport, 1)
-			} else {
-				if strings.Contains(src, "import(") {
-					src = strings.Replace(src, "import(", "import (\n\t"+`_ "`+integration.ImportPath+`"`, 1)
-				} else {
-					return fmt.Errorf("bloc import introuvable dans main.go")
-				}
-			}
-		}
-	} else {
-		// Regular import
-		if !strings.Contains(src, importCheck) {
-			importBlock := `import (`
-			newImport := importBlock + "\n\t" + `"` + integration.ImportPath + `"`
-			if strings.Contains(src, importBlock) {
-				src = strings.Replace(src, importBlock, newImport, 1)
-			} else {
-				if strings.Contains(src, "import(") {
-					src = strings.Replace(src, "import(", "import (\n\t"+`"`+integration.ImportPath+`"`, 1)
-				} else {
-					return fmt.Errorf("bloc import introuvable dans main.go")
-				}
-			}
-		}
-	}
-
-	// 2. Apply replacements
+	// 1. Apply replacements
+	applied := 0
 	for _, repl := range integration.Replacements {
 		if repl.Check != "" && !strings.Contains(src, repl.Check) {
 			continue // Skip if check string not found
 		}
 		if strings.Contains(src, repl.OldStr) {
 			src = strings.Replace(src, repl.OldStr, repl.NewStr, 1)
+			applied++
 		}
+	}
+	if len(integration.Replacements) > 0 && applied == 0 && !integration.BlankImport {
+		return nil
+	}
+
+	// 2. Add import
+	if integration.BlankImport {
+		importSpec = `_ ` + importSpec
+	}
+	src, ok := addImport(src, importSpec)
+	if !ok {
+		return fmt.Errorf("bloc import introuvable dans main.go")
 	}
 
 	if err := os.WriteFile(mainPath, []byte(src), 0o644); err != nil {

@@ -35,19 +35,11 @@ func (LoggingFeature) Check(ctx context.Context, project feature.ProjectContext)
 		return fmt.Errorf("vérifier l'installation existante : %w", err)
 	}
 	if installed {
-		return fmt.Errorf("logging version %s déjà installée", existing.Version)
+		return fmt.Errorf("logging version %s %w", existing.Version, feature.ErrAlreadyInstalled)
 	}
 
-	requiredPaths := []string{
-		filepath.Join(project.Root, "internal", "transport", "http", "router.go"),
-		filepath.Join(project.Root, "cmd", "server", "main.go"),
-		filepath.Join(project.Root, "go.mod"),
-	}
-
-	for _, p := range requiredPaths {
-		if _, err := os.Stat(p); err != nil {
-			return fmt.Errorf("fichier requis manquant : %s", p)
-		}
+	if err := feature.CheckGoHTTPProject(project.Root, true); err != nil {
+		return err
 	}
 
 	return nil
@@ -152,7 +144,7 @@ func (LoggingFeature) Apply(ctx context.Context, project feature.ProjectContext,
 	if err := feature.IntegrateRouterGo(project.Root, feature.RouterIntegration{
 		ModulePath:      project.Module,
 		ImportPath:      project.Module + "/internal/logging",
-		MiddlewareCall:  "logging.LoggingMiddleware(logger)",
+		MiddlewareCall:  "r.Use(logging.LoggingMiddleware(logging.DefaultLogger().Logger))",
 		MiddlewareCheck: "logging.LoggingMiddleware",
 	}); err != nil {
 		return fmt.Errorf("intégrer dans router.go : %w", err)
@@ -194,7 +186,7 @@ func (LoggingFeature) Remove(ctx context.Context, project feature.ProjectContext
 	if err := feature.RemoveRouterGo(project.Root, feature.RouterIntegration{
 		ModulePath:      project.Module,
 		ImportPath:      project.Module + "/internal/logging",
-		MiddlewareCall:  "logging.LoggingMiddleware(logger)",
+		MiddlewareCall:  "r.Use(logging.LoggingMiddleware(logging.DefaultLogger().Logger))",
 		MiddlewareCheck: "logging.LoggingMiddleware",
 	}); err != nil {
 		return fmt.Errorf("supprimer intégration router.go : %w", err)

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -1871,6 +1872,7 @@ func runFeatureAdd(
 	}
 
 	// Step 4: Check prerequisites for all features (dependencies first)
+	alreadyPresent := make(map[string]bool)
 	for _, feat := range featuresToInstall {
 		if g.Format == output.FormatHuman && !g.Quiet {
 			spinner = output.NewSpinner(console.Out)
@@ -1878,7 +1880,7 @@ func runFeatureAdd(
 		}
 
 		checkErr := feat.Check(ctx, project)
-		alreadyInstalled := checkErr != nil && strings.Contains(checkErr.Error(), "déjà installée")
+		alreadyInstalled := errors.Is(checkErr, feature.ErrAlreadyInstalled)
 		if checkErr != nil {
 			if spinner != nil {
 				if alreadyInstalled {
@@ -1889,6 +1891,7 @@ func runFeatureAdd(
 			}
 			if alreadyInstalled {
 				// Skip already installed dependencies - they're already satisfied
+				alreadyPresent[feat.Name()] = true
 				if dryRun || showPlan {
 					continue // In dry-run/plan mode, just show message and continue
 				}
@@ -1902,6 +1905,16 @@ func runFeatureAdd(
 		if spinner != nil {
 			spinner.Stop(fmt.Sprintf("✓ Prérequis validés pour %q", feat.Name()))
 		}
+	}
+
+	// Nothing to do when the requested feature is already present: installing its
+	// dependencies alone would change a project the user did not ask to change.
+	if alreadyPresent[name] {
+		if g.Format == output.FormatHuman && !g.Quiet {
+			fmt.Fprintln(console.Out)
+			fmt.Fprintf(console.Out, "✓ Feature %q déjà présente, aucune modification effectuée\n", name)
+		}
+		return nil
 	}
 
 	// Step 5: Build plan for the main feature (dependencies will be installed first)
@@ -1948,12 +1961,7 @@ func runFeatureAdd(
 
 	// Install each feature in order
 	for _, feat := range featuresToInstall {
-		// Check if already installed
-		installed, _, _ := feature.IsInstalled(project.Root, feat.Name())
-		if installed {
-			if g.Format == output.FormatHuman && !g.Quiet {
-				fmt.Fprintf(console.Out, "  ✓ %s déjà installé, ignoré\n", feat.Name())
-			}
+		if alreadyPresent[feat.Name()] {
 			continue
 		}
 
@@ -2409,92 +2417,6 @@ func printFeaturePlan(g *globalFlags, plan feature.Plan, dryRun, showPlan bool) 
 	} else {
 		fmt.Fprintln(console.Out, "Aucune modification effectuée (--dry-run).")
 	}
-
-	return nil
-}
-
-// InstallSnapshot holds the state of the project before installation for rollback.
-type InstallSnapshot struct {
-	GoModContent []byte
-	GoSumContent []byte
-	ForgeDirPath string
-	ForgeFiles   map[string][]byte
-}
-
-// createInstallSnapshot captures the current state of key project files.
-func createInstallSnapshot(projectRoot string) (*InstallSnapshot, error) {
-	snapshot := &InstallSnapshot{
-		ForgeFiles: make(map[string][]byte),
-	}
-
-	// Snapshot go.mod
-	if data, err := os.ReadFile(filepath.Join(projectRoot, "go.mod")); err == nil {
-		snapshot.GoModContent = data
-	}
-
-	// Snapshot go.sum
-	if data, err := os.ReadFile(filepath.Join(projectRoot, "go.sum")); err == nil {
-		snapshot.GoSumContent = data
-	}
-
-	// Snapshot .forge directory
-	forgeDir := filepath.Join(projectRoot, ".forge")
-	snapshot.ForgeDirPath = forgeDir
-	if info, err := os.Stat(forgeDir); err == nil && info.IsDir() {
-		filepath.WalkDir(forgeDir, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
-			if data, err := os.ReadFile(path); err == nil {
-				relPath, _ := filepath.Rel(projectRoot, path)
-				snapshot.ForgeFiles[relPath] = data
-			}
-			return nil
-		})
-	}
-
-	return snapshot, nil
-}
-
-// restoreInstallSnapshot restores the project state from a snapshot.
-func restoreInstallSnapshot(projectRoot string, snapshot *InstallSnapshot) error {
-	// Restore go.mod
-	if len(snapshot.GoModContent) > 0 {
-		if err := os.WriteFile(filepath.Join(projectRoot, "go.mod"), snapshot.GoModContent, 0o644); err != nil {
-			return fmt.Errorf("restaurer go.mod: %w", err)
-		}
-	} else {
-		// If no go.mod was present, remove it
-		_ = os.Remove(filepath.Join(projectRoot, "go.mod"))
-	}
-
-	// Restore go.sum
-	if len(snapshot.GoSumContent) > 0 {
-		if err := os.WriteFile(filepath.Join(projectRoot, "go.sum"), snapshot.GoSumContent, 0o644); err != nil {
-			return fmt.Errorf("restaurer go.sum: %w", err)
-		}
-	} else {
-		_ = os.Remove(filepath.Join(projectRoot, "go.sum"))
-	}
-
-	// Restore .forge directory
-	if snapshot.ForgeDirPath != "" {
-		// Remove current .forge
-		_ = os.RemoveAll(snapshot.ForgeDirPath)
-		// Restore from snapshot
-		for relPath, data := range snapshot.ForgeFiles {
-			fullPath := filepath.Join(projectRoot, relPath)
-			if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-				return fmt.Errorf("créer répertoire %s: %w", filepath.Dir(fullPath), err)
-			}
-			if err := os.WriteFile(fullPath, data, 0o644); err != nil {
-				return fmt.Errorf("restaurer %s: %w", relPath, err)
-			}
-		}
-	}
-
-	// Run go mod tidy to restore consistency
-	_ = feature.RunGoModTidy(projectRoot)
 
 	return nil
 }

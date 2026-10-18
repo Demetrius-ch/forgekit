@@ -24,6 +24,9 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: End-to-end tests
+        run: go test -tags e2e ./internal/e2e/...
+
       - name: Build
         run: go build -o forge ./cmd/forge
 

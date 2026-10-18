@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/Demetrius-ch/forgekit/internal/feature"
 	"github.com/Demetrius-ch/forgekit/internal/template"
@@ -36,19 +37,16 @@ func (SwaggerFeature) Check(ctx context.Context, project feature.ProjectContext)
 		return fmt.Errorf("vérifier l'installation existante : %w", err)
 	}
 	if installed {
-		return fmt.Errorf("swagger version %s déjà installée", existing.Version)
+		return fmt.Errorf("swagger version %s %w", existing.Version, feature.ErrAlreadyInstalled)
 	}
 
-	requiredPaths := []string{
-		filepath.Join(project.Root, "internal", "transport", "http", "router.go"),
-		filepath.Join(project.Root, "cmd", "server", "main.go"),
-		filepath.Join(project.Root, "go.mod"),
+	if err := feature.CheckGoHTTPProject(project.Root, true); err != nil {
+		return err
 	}
 
-	for _, p := range requiredPaths {
-		if _, err := os.Stat(p); err != nil {
-			return fmt.Errorf("fichier requis manquant : %s", p)
-		}
+	// Projects created with `forge init --docs swagger` already register the routes.
+	if router, err := os.ReadFile(feature.RouterPath(project.Root)); err == nil && strings.Contains(string(router), "swagger.RegisterRoutes") {
+		return fmt.Errorf("swagger : routes déjà enregistrées dans le router, %w", feature.ErrAlreadyInstalled)
 	}
 
 	return nil
@@ -142,6 +140,7 @@ func (SwaggerFeature) Apply(ctx context.Context, project feature.ProjectContext,
 		ImportPath:      project.Module + "/internal/swagger",
 		MiddlewareCall:  "swagger.RegisterRoutes(r)",
 		MiddlewareCheck: "swagger.RegisterRoutes",
+		IsRoute:         true,
 	}); err != nil {
 		return fmt.Errorf("intégrer dans router.go : %w", err)
 	}

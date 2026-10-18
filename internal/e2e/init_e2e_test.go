@@ -37,9 +37,9 @@ func TestForgeInitE2E(t *testing.T) {
 
 	required := []string{
 		"cmd/server/main.go",
-		"internal/domain/user.go",
-		"internal/application/user/service.go",
-		"internal/infrastructure/postgres/pool.go",
+		"internal/domain/health.go",
+		"internal/application/health.go",
+		"internal/infrastructure/postgres/database.go",
 		"internal/transport/http/router.go",
 		"forge.yaml",
 		"go.mod",

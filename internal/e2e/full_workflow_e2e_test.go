@@ -418,9 +418,12 @@ func TestErrorScenariosE2E(t *testing.T) {
 
 	// Test 3: Dependency resolution (cors depends on auth)
 	t.Log("Test 3: Dependency resolution")
-	// Remove auth from features.yaml to simulate missing dependency
+	// Remove auth (record and files) to simulate a missing dependency
 	featuresYaml := filepath.Join(target, ".forge", "features.yaml")
 	if err := os.WriteFile(featuresYaml, []byte("features: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(target, "internal", "auth")); err != nil {
 		t.Fatal(err)
 	}
 	// Try to add cors without auth - should automatically install auth as dependency
