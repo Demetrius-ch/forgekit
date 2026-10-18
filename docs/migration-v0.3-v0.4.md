@@ -39,8 +39,8 @@ forgekit init my-api \
   --docker \
   --auth jwt \
   --docs swagger \
-  --tests unit+integration \
-  --ci github \
+  --tests unit-integration \
+  --ci github-actions \
   --non-interactive
 
 # Preview without creating files

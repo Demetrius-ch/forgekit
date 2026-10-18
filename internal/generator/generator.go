@@ -85,6 +85,12 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 		ProjectConfig:      projectConfig,
 	}
 
+	// A target directory that already existed (empty, see ValidateTargetDir) is
+	// emptied on failure rather than deleted: it may be the current directory.
+	_, statErr := os.Stat(opts.TargetDir)
+	targetExisted := statErr == nil
+	cleanup := func() { removeGenerated(opts.TargetDir, targetExisted) }
+
 	if !opts.DryRun {
 		if err := os.MkdirAll(opts.TargetDir, 0o755); err != nil {
 			return nil, fmt.Errorf("créer le répertoire %q : %w", opts.TargetDir, err)
@@ -111,7 +117,7 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	}, executionFiles)
 	if err != nil {
 		if !opts.DryRun {
-			_ = os.RemoveAll(opts.TargetDir)
+			cleanup()
 		}
 		return plan, err
 	}
@@ -122,24 +128,24 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 
 	meta := forge.CreateInitialMetadataWithConfig(opts.TargetDir, data.GoVersion, projectConfig)
 	if err := forge.SaveMetadata(opts.TargetDir, meta); err != nil {
-		_ = os.RemoveAll(opts.TargetDir)
+		cleanup()
 		return plan, fmt.Errorf("create forge metadata: %w", err)
 	}
 
 	// Initialize project based on language
 	if projectConfig.IsGo() {
 		if err := g.initGoMod(opts.TargetDir, opts.ModulePath, data.GoVersion, generationPlan.Dependencies); err != nil {
-			_ = os.RemoveAll(opts.TargetDir)
+			cleanup()
 			return plan, err
 		}
 	} else if projectConfig.IsNode() && !opts.SkipNpmInstall {
 		if err := g.initNpmProject(opts.TargetDir); err != nil {
-			_ = os.RemoveAll(opts.TargetDir)
+			cleanup()
 			return plan, err
 		}
 	} else if projectConfig.IsPython() && !opts.SkipNpmInstall {
 		if err := g.initPythonProject(opts.TargetDir); err != nil {
-			_ = os.RemoveAll(opts.TargetDir)
+			cleanup()
 			return plan, err
 		}
 	}
@@ -151,6 +157,22 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	}
 
 	return plan, nil
+}
+
+// removeGenerated deletes what Init created in dir: the whole directory, or
+// only its content when the directory existed beforehand.
+func removeGenerated(dir string, keepDir bool) {
+	if !keepDir {
+		_ = os.RemoveAll(dir)
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		_ = os.RemoveAll(filepath.Join(dir, entry.Name()))
+	}
 }
 
 func (g *Generator) initGoMod(dir, modulePath, goVersion string, dependencies []generationplan.Dependency) error {

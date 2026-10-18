@@ -107,7 +107,10 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 			}
 
 			dbSelection := DatabaseSelection{DatabaseName: dbName}
-			if selectedDatabase == projectconfig.DatabasePostgres {
+			// Looking for existing databases connects to the local PostgreSQL server
+			// with its default credentials; it only serves the interactive choice of
+			// an existing database, so scripted runs never attempt it.
+			if selectedDatabase == projectconfig.DatabasePostgres && !nonInteractive {
 				// Pass the originally requested postgres port to know if it was auto-selected.
 				dbSelection, err = selectDatabase(g, projectName, dbName, portSelection.DBHostPort, requestedDBPort, nonInteractive, dryRun)
 				if err != nil {
@@ -1748,6 +1751,15 @@ func newRemoveCommand(g *globalFlags) *cobra.Command {
 	return cmd
 }
 
+// featureResult is the JSON output of forge add and forge remove.
+type featureResult struct {
+	SchemaVersion string   `json:"schema_version"`
+	Status        string   `json:"status"`
+	Feature       string   `json:"feature"`
+	Installed     []string `json:"installed,omitempty"`
+	DurationMs    int64    `json:"duration_ms"`
+}
+
 func runFeatureList(g *globalFlags, registry *feature.Registry) error {
 	features := registry.List()
 	console := g.console()
@@ -1937,6 +1949,9 @@ func runFeatureAdd(
 	// Nothing to do when the requested feature is already present: installing its
 	// dependencies alone would change a project the user did not ask to change.
 	if alreadyPresent[name] {
+		if g.Format == output.FormatJSON {
+			return console.PrintJSON(featureResult{SchemaVersion: report.JSONSchemaVersion, Status: "already_present", Feature: name, Installed: []string{}})
+		}
 		if g.Format == output.FormatHuman && !g.Quiet {
 			fmt.Fprintln(console.Out)
 			fmt.Fprintf(console.Out, "✓ Feature %q déjà présente, aucune modification effectuée\n", name)
@@ -1999,6 +2014,7 @@ func runFeatureAdd(
 	}
 
 	// Install each feature in order
+	installedNames := []string{}
 	for _, feat := range featuresToInstall {
 		if alreadyPresent[feat.Name()] {
 			continue
@@ -2036,6 +2052,7 @@ func runFeatureAdd(
 		if spinner != nil {
 			spinner.Stop(fmt.Sprintf("✓ %s installé", feat.Name()))
 		}
+		installedNames = append(installedNames, feat.Name())
 	}
 
 	if g.Format == output.FormatHuman && !g.Quiet && spinner == nil {
@@ -2050,6 +2067,9 @@ func runFeatureAdd(
 	}
 
 	totalDuration := time.Since(addStart)
+	if g.Format == output.FormatJSON {
+		return console.PrintJSON(featureResult{SchemaVersion: report.JSONSchemaVersion, Status: "installed", Feature: name, Installed: installedNames, DurationMs: totalDuration.Milliseconds()})
+	}
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
 		fmt.Fprintln(console.Out, "────────────────────────────────")
@@ -2254,6 +2274,9 @@ func runFeatureRemove(
 	}
 
 	totalDuration := time.Since(removeStart)
+	if g.Format == output.FormatJSON {
+		return console.PrintJSON(featureResult{SchemaVersion: report.JSONSchemaVersion, Status: "removed", Feature: name, DurationMs: totalDuration.Milliseconds()})
+	}
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
 		fmt.Fprintln(console.Out, "────────────────────────────────")

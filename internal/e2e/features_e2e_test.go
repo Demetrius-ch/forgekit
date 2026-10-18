@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -213,6 +214,48 @@ func TestCIModeOnFreshProjectE2E(t *testing.T) {
 		}
 		if strings.Contains(string(out), "erreur") {
 			t.Fatalf("forge %s --ci printed an error on success:\n%s", command, out)
+		}
+	}
+}
+
+// TestAddRemoveJSONOutputE2E checks that forge add/remove --format json print
+// a single JSON document on stdout.
+func TestAddRemoveJSONOutputE2E(t *testing.T) {
+	root := t.TempDir()
+	bin := buildForge(t, root)
+	project := "json-output"
+	target := filepath.Join(root, project)
+	run(t, root, bin, "init", project,
+		"--non-interactive",
+		"--module", "github.com/forgekit/"+project,
+		"--database", "none",
+		"--docker=false",
+		"--quiet",
+	)
+
+	for _, step := range []struct {
+		args   []string
+		status string
+	}{
+		{[]string{"add", "auth"}, "installed"},
+		{[]string{"add", "auth"}, "already_present"},
+		{[]string{"remove", "auth"}, "removed"},
+	} {
+		cmd := exec.Command(bin, append(step.args, "--format", "json")...)
+		cmd.Dir = target
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("forge %v: %v", step.args, err)
+		}
+		var result struct {
+			Status  string `json:"status"`
+			Feature string `json:"feature"`
+		}
+		if err := json.Unmarshal(out, &result); err != nil {
+			t.Fatalf("forge %v: invalid JSON %q: %v", step.args, out, err)
+		}
+		if result.Status != step.status || result.Feature != "auth" {
+			t.Fatalf("forge %v: got %+v, want status %q", step.args, result, step.status)
 		}
 	}
 }

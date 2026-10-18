@@ -26,6 +26,15 @@
     "api",
     "hexagonal"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Run Doctor executes the ForgeKit CLI and is disabled in untrusted workspaces.",
+      "restrictedConfigurations": [
+        "forgekit.cliPath"
+      ]
+    }
+  },
   "activationEvents": [
     "workspaceContains:.forge/forge.yaml",
     "onCommand:forgekit.inspectProject",
@@ -68,8 +77,9 @@
       "properties": {
         "forgekit.cliPath": {
           "type": "string",
-          "default": "forge",
-          "description": "Path to the ForgeKit CLI executable"
+          "default": "",
+          "scope": "machine",
+          "description": "Path to the ForgeKit CLI executable. Empty: forgekit or forge found on PATH. User setting only: a workspace cannot override it."
         },
         "forgekit.autoDetect": {
           "type": "boolean",

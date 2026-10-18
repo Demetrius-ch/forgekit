@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { spawn } from 'child_process';
 
 interface ForgeMetadata {
   version: string;
@@ -39,6 +38,38 @@ async function loadYaml() {
     yamlParse = yamlModule.parse;
   }
   return yamlParse;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// resolveCliPath returns the configured CLI, or the first of forgekit / forge
+// found on PATH: WinGet only installs forgekit, `go install` only forge.
+function resolveCliPath(): string {
+  const configured = vscode.workspace.getConfiguration('forgekit').get<string>('cliPath');
+  if (configured) {
+    return configured;
+  }
+  const extensions = process.platform === 'win32'
+    ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
+    : [''];
+  const dirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  for (const name of ['forgekit', 'forge']) {
+    for (const dir of dirs) {
+      for (const ext of extensions) {
+        if (fs.existsSync(path.join(dir, name + ext))) {
+          return name;
+        }
+      }
+    }
+  }
+  return 'forgekit';
 }
 
 function createStatusBarItem(): vscode.StatusBarItem {
@@ -210,10 +241,14 @@ function showInspectResult(projectName: string, result: ValidationResult) {
     'forgekitInspect',
     `ForgeKit: ${projectName}`,
     vscode.ViewColumn.One,
-    { enableScripts: true }
+    // The page is static: no script may run in it.
+    { enableScripts: false }
   );
 
-  let html = '<html><body style="font-family: var(--vscode-font-family); padding: 20px; line-height: 1.6;">';
+  // Every value below comes from files of the opened folder, which may be
+  // untrusted: it is escaped and the Content-Security-Policy forbids scripts.
+  let html = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\';"></head>';
+  html += '<body style="font-family: var(--vscode-font-family); padding: 20px; line-height: 1.6;">';
   html += '<h1 style="color: var(--vscode-terminal-ansiGreen);">ForgeKit</h1>';
   html += '<hr style="border-color: var(--vscode-panel-border);">';
 
@@ -224,19 +259,19 @@ function showInspectResult(projectName: string, result: ValidationResult) {
     html += '<p><strong>Signature:</strong> <span style="color: var(--vscode-terminal-ansiRed);">INVALIDE</span></p>';
     html += '<ul>';
     for (const err of result.errors) {
-      html += `<li style="color: var(--vscode-terminal-ansiRed);">${err}</li>`;
+      html += `<li style="color: var(--vscode-terminal-ansiRed);">${escapeHtml(String(err))}</li>`;
     }
     html += '</ul>';
     html += '<p>Exécutez <code>ForgeKit: Run Doctor</code> pour plus de détails.</p>';
   } else {
     if (result.metadata) {
-      html += `<p><strong>Project:</strong> ${result.metadata.project}</p>`;
-      html += `<p><strong>ForgeKit:</strong> v${result.metadata.version}</p>`;
-      html += `<p><strong>Schema:</strong> ${result.metadata.schema}</p>`;
-      html += `<p><strong>Language:</strong> ${result.metadata.language}</p>`;
-      html += `<p><strong>Type:</strong> ${result.metadata.type}</p>`;
+      html += `<p><strong>Project:</strong> ${escapeHtml(String(result.metadata.project))}</p>`;
+      html += `<p><strong>ForgeKit:</strong> v${escapeHtml(String(result.metadata.version))}</p>`;
+      html += `<p><strong>Schema:</strong> ${escapeHtml(String(result.metadata.schema))}</p>`;
+      html += `<p><strong>Language:</strong> ${escapeHtml(String(result.metadata.language))}</p>`;
+      html += `<p><strong>Type:</strong> ${escapeHtml(String(result.metadata.type))}</p>`;
       if (result.metadata.created_at) {
-        html += `<p><strong>Created:</strong> ${new Date(result.metadata.created_at).toLocaleString()}</p>`;
+        html += `<p><strong>Created:</strong> ${escapeHtml(String(new Date(result.metadata.created_at).toLocaleString()))}</p>`;
       }
     }
 
@@ -248,7 +283,7 @@ function showInspectResult(projectName: string, result: ValidationResult) {
     if (result.features && result.features.length > 0) {
       html += '<ul>';
       for (const feat of result.features) {
-        html += `<li>✓ ${feat.name}  v${feat.version}</li>`;
+        html += `<li>✓ ${escapeHtml(String(feat.name))}  v${escapeHtml(String(feat.version))}</li>`;
       }
       html += '</ul>';
     } else {
@@ -261,7 +296,7 @@ function showInspectResult(projectName: string, result: ValidationResult) {
     if (result.warnings && result.warnings.length > 0) {
       html += '<h3>Avertissements:</h3><ul>';
       for (const warn of result.warnings) {
-        html += `<li style="color: var(--vscode-terminal-ansiYellow);">⚠ ${warn}</li>`;
+        html += `<li style="color: var(--vscode-terminal-ansiYellow);">⚠ ${escapeHtml(String(warn))}</li>`;
       }
       html += '</ul>';
     }
@@ -280,8 +315,11 @@ async function runDoctor() {
     return;
   }
 
-  const config = vscode.workspace.getConfiguration('forgekit');
-  const cliPath = config.get<string>('cliPath') || 'forge';
+  if (!vscode.workspace.isTrusted) {
+    vscode.window.showWarningMessage('ForgeKit: Run Doctor is disabled in untrusted workspaces.');
+    return;
+  }
+  const cliPath = resolveCliPath();
 
   for (const folder of folders) {
     const terminal = vscode.window.createTerminal({

@@ -59,7 +59,7 @@ Click the status bar item to run **ForgeKit: Inspect Project**.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `forgekit.cliPath` | string | `forge` | Path to the ForgeKit CLI executable |
+| `forgekit.cliPath` | string | (empty) | Path to the ForgeKit CLI executable. Empty: `forgekit`, then `forge`, found on PATH. User setting only (a workspace's `.vscode/settings.json` cannot change it) |
 | `forgekit.autoDetect` | boolean | `true` | Automatically detect ForgeKit projects in workspace |
 
 ## Project Detection
@@ -107,6 +107,7 @@ ForgeKit's visual identity is provided through UI elements the extension fully c
 
 - VS Code 1.85+
 - ForgeKit CLI installed and in PATH (or configured via `forgekit.cliPath`)
+- A trusted workspace for `ForgeKit: Run Doctor` (disabled in Restricted Mode, since it runs the CLI)
 
 ## Architecture
 

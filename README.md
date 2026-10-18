@@ -321,10 +321,14 @@ forgekit init my-api \
   --docker \
   --auth jwt \
   --docs swagger \
-  --tests unit+integration \
-  --ci github \
+  --tests unit-integration \
+  --ci github-actions \
   --non-interactive
 ```
+
+In non-interactive mode ForgeKit does not connect to any local database server.
+In interactive mode with PostgreSQL, it looks for existing databases on the local
+server (default `postgres` credentials) so that you can reuse one.
 
 ### Supported architectures
 
