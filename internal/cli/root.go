@@ -50,6 +50,14 @@ func NewRootCommand() *cobra.Command {
 	}
 
 	bindGlobalFlags(root, g)
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		switch g.Format {
+		case output.FormatHuman, output.FormatJSON:
+			return nil
+		default:
+			return fmt.Errorf("format de sortie invalide %q : valeurs acceptées human, json", g.Format)
+		}
+	}
 	root.AddCommand(newInitCommand(g))
 	root.AddCommand(newVersionCommand(g))
 	root.AddCommand(newAddCommand(g))

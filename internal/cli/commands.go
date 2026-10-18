@@ -1124,9 +1124,7 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 	}
 
 	// Detect project language
-	detector := feature.Detector{}
-	projectCtx, _ := detector.DetectLoose(root)
-	language := string(projectCtx.Language)
+	rctx := ruleContext(root)
 
 	categories := []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"}
 	var allFindings []report.Finding
@@ -1147,19 +1145,19 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 		switch cat {
 		case "Architecture":
 			reg := rules.NewRegistry(rules.ArchitectureRule{Rules: loader.ArchitectureRules()})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+			findings, err = reg.Run(context.Background(), rctx)
 		case "Security":
 			reg := rules.NewRegistry(rules.SecuritySecretsRule{}, rules.SecurityCORSRule{})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+			findings, err = reg.Run(context.Background(), rctx)
 		case "Configuration":
 			reg := rules.NewRegistry(rules.GoModRule{}, rules.EnvFileRule{}, rules.PackageJSONRule{})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+			findings, err = reg.Run(context.Background(), rctx)
 		case "Docker":
 			reg := rules.NewRegistry(rules.DockerRule{})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+			findings, err = reg.Run(context.Background(), rctx)
 		case "Tests":
 			// lightweight test detection: presence of _test.go or .test.ts/.test.js files
-			findings, err = detectTests(root, language)
+			findings, err = detectTests(root, rctx.Language)
 		case "Documentation":
 			findings, err = detectDocs(root)
 		default:
@@ -1243,13 +1241,24 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 		if hasWarnings {
 			return &CiError{Code: 1, Err: fmt.Errorf("warnings détectés : %d warning(s)", res.Summary.Warning)}
 		}
-		return &CiError{Code: 0, Err: nil}
+		return nil
 	}
 
 	if report.HasFailures(res.Summary) {
 		return fmt.Errorf("diagnostics en échec : %d error(s)", res.Summary.Error+res.Summary.Critical)
 	}
 	return nil
+}
+
+// ruleContext describes the project to the diagnostic rules: its language and,
+// for ForgeKit projects, the configuration chosen at generation time.
+func ruleContext(root string) rules.Context {
+	project, _ := feature.Detector{}.DetectLoose(root)
+	rctx := rules.Context{ProjectRoot: root, Language: string(project.Language)}
+	if meta, err := forge.LoadMetadata(root); err == nil && meta.Configuration != nil {
+		rctx.Project = meta.Configuration
+	}
+	return rctx
 }
 
 // CiError wraps an error with an exit code for CI mode.
@@ -1428,15 +1437,13 @@ func checkDoctorExitCode(g *globalFlags, root string, extraFindings []report.Fin
 	console := g.console()
 
 	// Detect project language
-	detector := feature.Detector{}
-	project, _ := detector.DetectLoose(root)
-	language := string(project.Language)
-	if language == "" {
-		language = "go" // default
+	rctx := ruleContext(root)
+	if rctx.Language == "" {
+		rctx.Language = "go" // default
 	}
 
 	// Run the same rules as runReport to get all findings
-	findings, err := reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+	findings, err := reg.Run(context.Background(), rctx)
 	if err != nil {
 		return &CiError{Code: 2, Err: err}
 	}
@@ -1475,7 +1482,7 @@ func checkDoctorExitCode(g *globalFlags, root string, extraFindings []report.Fin
 	if hasWarnings {
 		return &CiError{Code: 1, Err: fmt.Errorf("warnings détectés : %d warning(s)", res.Summary.Warning)}
 	}
-	return &CiError{Code: 0, Err: nil}
+	return nil
 }
 
 // printDoctorCiSummary prints a compact summary for doctor CI mode.
@@ -1605,12 +1612,8 @@ func runReport(g *globalFlags, command, root string, reg *rules.Registry, extraF
 	}
 
 	// Detect project language
-	detector := feature.Detector{}
-	projectCtx, _ := detector.DetectLoose(root)
-	language := string(projectCtx.Language)
-
 	start := time.Now()
-	findings, err := reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+	findings, err := reg.Run(context.Background(), ruleContext(root))
 	if spinner != nil {
 		if err != nil {
 			spinner.Stop("✗ Analyse interrompue")

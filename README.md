@@ -777,6 +777,12 @@ forgekit doctor --ci
 
 Exit codes: `0` = success, `1` = warnings/errors, `2` = execution error
 
+Checks follow the configuration chosen at `forge init` (recorded in `.forge/forge.yaml`):
+a project generated with `--docker=false` or without PostgreSQL is not reported for
+missing Docker files or PostgreSQL variables, so a freshly generated project passes
+`doctor --ci` and `analyze --ci`. Environment checks still apply: a project with Docker
+enabled gets a warning when the Docker daemon does not respond.
+
 **JSON output**:
 
 ```bash
@@ -864,7 +870,7 @@ Global options:
 
 ```text
 --debug
---format
+--format   human (default) or json; any other value is rejected
 --quiet
 ```
 

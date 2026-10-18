@@ -189,6 +189,12 @@ func (DockerRule) Severity() report.Severity {
 
 func (DockerRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
 	if !hasDockerConfig(rctx.ProjectRoot) {
+		if rctx.Project != nil && !rctx.Project.Docker {
+			return []report.Finding{{
+				ID: "docker.disabled", Category: "pass", Severity: report.SeverityInfo,
+				Message: "Docker désactivé dans la configuration du projet",
+			}}, nil
+		}
 		return []report.Finding{{
 			ID: "docker.project.missing", Category: "docker", Severity: report.SeverityWarning,
 			Message:    "Aucun fichier Docker détecté dans le projet",
@@ -353,9 +359,9 @@ func (EnvFileRule) Run(_ context.Context, rctx Context) ([]report.Finding, error
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []report.Finding{{
-				ID: "project.env", Category: "project", Severity: report.SeverityWarning,
-				Message:    ".env manquant",
-				Suggestion: "cp .env.example .env",
+				ID: "project.env", Category: "project", Severity: report.SeverityInfo,
+				Message:    ".env absent (variables d'environnement attendues depuis le système)",
+				Suggestion: "En local : cp .env.example .env",
 			}}, nil
 		}
 		return nil, err
@@ -543,7 +549,7 @@ func (DockerBestPracticesRule) Run(_ context.Context, rctx Context) ([]report.Fi
 		findings = append(findings, report.Finding{
 			ID:          "docker.missing_limits",
 			Category:    "docker",
-			Severity:    report.SeverityWarning,
+			Severity:    report.SeverityInfo, // a recommendation for production, not a defect of a local compose file
 			File:        "docker/docker-compose.yml",
 			Message:     "Aucune limite de ressources (CPU/mémoire) configurée",
 			Explanation: "Les limites empêchent un service de monopoliser les ressources",

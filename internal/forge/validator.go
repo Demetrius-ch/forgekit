@@ -108,12 +108,6 @@ func ValidateSignature(projectRoot string) ValidationResult {
 		result.Features = features
 	}
 
-	if !result.LegacyProject {
-		if len(features.Features) == 0 {
-			result.Warnings = append(result.Warnings, "no features registered in .forge/features.yaml")
-		}
-	}
-
 	for _, feat := range features.Features {
 		// Check both Go-style (internal/) and Python-style (root-level) paths
 		goPath := filepath.Join(projectRoot, "internal", feat.Name)

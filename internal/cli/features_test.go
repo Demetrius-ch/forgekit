@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Demetrius-ch/forgekit/internal/feature"
@@ -74,5 +76,15 @@ func TestDefaultModulePathFor(t *testing.T) {
 		if got := defaultModulePathFor(language, "my-api"); got != want {
 			t.Errorf("defaultModulePathFor(%q) = %q, want %q", language, got, want)
 		}
+	}
+}
+
+func TestInvalidFormatIsRejected(t *testing.T) {
+	root := NewRootCommand()
+	root.SetArgs([]string{"version", "--format", "xml"})
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "format de sortie invalide") {
+		t.Fatalf("expected invalid format error, got %v", err)
 	}
 }

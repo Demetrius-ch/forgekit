@@ -188,3 +188,31 @@ func TestAddRefusesToOverwriteE2E(t *testing.T) {
 	}
 	run(t, target, "go", "build", "./...")
 }
+
+// TestCIModeOnFreshProjectE2E checks that a freshly generated project without
+// Docker nor database passes doctor and analyze in CI mode, silently.
+func TestCIModeOnFreshProjectE2E(t *testing.T) {
+	root := t.TempDir()
+	bin := buildForge(t, root)
+	project := "ci-fresh"
+	target := filepath.Join(root, project)
+	run(t, root, bin, "init", project,
+		"--non-interactive",
+		"--module", "github.com/forgekit/"+project,
+		"--database", "none",
+		"--docker=false",
+		"--quiet",
+	)
+
+	for _, command := range []string{"doctor", "analyze"} {
+		cmd := exec.Command(bin, command, "--ci")
+		cmd.Dir = target
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("forge %s --ci should pass on a fresh project: %v\n%s", command, err, out)
+		}
+		if strings.Contains(string(out), "erreur") {
+			t.Fatalf("forge %s --ci printed an error on success:\n%s", command, out)
+		}
+	}
+}

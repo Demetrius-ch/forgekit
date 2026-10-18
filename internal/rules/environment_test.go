@@ -28,7 +28,7 @@ func TestEnvFileRule_MissingEnvExampleIsWarning(t *testing.T) {
 	}
 }
 
-func TestEnvFileRule_MissingEnvIsWarning(t *testing.T) {
+func TestEnvFileRule_MissingEnvIsInfo(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".env.example"), []byte("KEY=VALUE\n"), 0o644); err != nil {
 		t.Fatalf("write .env.example: %v", err)
@@ -45,8 +45,9 @@ func TestEnvFileRule_MissingEnvIsWarning(t *testing.T) {
 	if f.ID != "project.env" {
 		t.Fatalf("expected project.env, got %q", f.ID)
 	}
-	if f.Severity != report.SeverityWarning {
-		t.Fatalf("expected warning severity, got %q", f.Severity)
+	// A missing .env is normal outside local development (CI, containers).
+	if f.Severity != report.SeverityInfo {
+		t.Fatalf("expected info severity, got %q", f.Severity)
 	}
 }
 
