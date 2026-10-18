@@ -63,6 +63,12 @@ jobs:
           sudo snap install snapcraft --classic
           sudo snap install core22
 
+      - name: Set Snap version from tag
+        run: |
+          VERSION="${{ steps.get_tag.outputs.tag }}"
+          sed -i "s/^version: .*/version: '${VERSION#v}'/" snap/snapcraft.yaml
+          grep "^version:" snap/snapcraft.yaml
+
       - name: Build Snap
         working-directory: ./snap
         run: |

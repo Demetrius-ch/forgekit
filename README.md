@@ -81,7 +81,7 @@ curl -fsSL https://demetrius-ch.github.io/forgekit/forgekit-archive-keyring.gpg 
 
 # 2. Add the APT repository
 echo "deb [signed-by=/usr/share/keyrings/forgekit-archive-keyring.gpg] https://demetrius-ch.github.io/forgekit stable main" \
-  | sudo tee /etc/apt/sources.list.d/forgekit.sources
+  | sudo tee /etc/apt/sources.list.d/forgekit.list
 
 # 3. Update and install
 sudo apt update
@@ -98,7 +98,7 @@ Uninstall:
 ```bash
 sudo apt remove forgekit
 # Optionally remove the repository and key
-sudo rm /etc/apt/sources.list.d/forgekit.sources /usr/share/keyrings/forgekit-archive-keyring.gpg
+sudo rm /etc/apt/sources.list.d/forgekit.list /usr/share/keyrings/forgekit-archive-keyring.gpg
 sudo apt update
 ```
 
@@ -205,8 +205,8 @@ sha256sum -c checksums.txt
 
 Download the Windows archive from [GitHub Releases](https://github.com/Demetrius-ch/forgekit/releases):
 
-- **Windows x86_64**: `forgekit_<version>_Windows_x86_64.zip`
-- **Windows ARM64**: `forgekit_<version>_Windows_arm64.zip`
+- **Windows x86_64**: `forgekit_<version>_windows_amd64.zip`
+- **Windows ARM64**: `forgekit_<version>_windows_arm64.zip`
 
 Extract the archive, place `forgekit.exe` in a folder of your choice, and add that folder to your **PATH** (User or System environment variable).
 
@@ -218,7 +218,8 @@ forgekit doctor
 forgekit init my-api
 ```
 
-> **Note**: ForgeKit is a standalone binary — **Go is not required** to run ForgeKit itself. Go is only needed for `forge init` (to run `go mod tidy` and tests on the generated project), `forge add/remove`, and `forge doctor` (to check Go version).
+> **Note**: ForgeKit is a standalone binary — **Go is not required** to run ForgeKit itself. Go is only needed to generate Go projects with `forgekit init` (to run `go mod tidy` and tests on the generated project), for `forgekit add/remove`, and for the Go checks of `forgekit doctor`.
+> The WinGet package and the Windows archive provide the `forgekit` command only (no `forge` alias).
 
 See [docs/install-windows.md](docs/install-windows.md) for detailed installation instructions, prerequisites, and troubleshooting.
 
@@ -1113,9 +1114,9 @@ The generated project belongs to the developer. ForgeKit does not create a propr
 - [x] JSON output for `forgekit init`
 - [x] Graceful shutdown in generated projects
 - [x] Adaptive feature paths for all architectures
-- [x] Multi Go version CI (1.22–1.25)
+- [x] CI on the Go version required by go.mod (Linux, macOS, Windows)
 - [x] Performance benchmarks
-- [x] Cross-platform support (Linux, Windows, macOS)
+- [x] Cross-platform support: prebuilt binaries for Linux and Windows; macOS from source (`go install`)
 
 ### Future
 

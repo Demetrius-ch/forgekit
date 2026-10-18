@@ -1,4 +1,4 @@
-# WinGet Locale Manifest for ForgeKit v0.3.6 (en-US)
+# WinGet Default Locale Manifest for ForgeKit v0.3.6 (en-US)
 # See: https://github.com/microsoft/winget-pkgs/blob/master/manifest-spec/manifest-schema.md
 
 PackageIdentifier: Demetrius-ch.ForgeKit
@@ -44,6 +44,5 @@ Tags:
 Moniker: forgekit
 Commands:
   - forgekit
-  - forge
-ManifestType: locale
+ManifestType: defaultLocale
 ManifestVersion: 1.12.0

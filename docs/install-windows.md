@@ -6,8 +6,8 @@
 
 Rendez-vous sur la page [GitHub Releases](https://github.com/Demetrius-ch/forgekit/releases) et téléchargez l'archive correspondant à votre architecture :
 
-- **Windows x86_64 (64-bit)** : `forgekit_<version>_Windows_x86_64.zip`
-- **Windows ARM64** : `forgekit_<version>_Windows_arm64.zip`
+- **Windows x86_64 (64-bit)** : `forgekit_<version>_windows_amd64.zip`
+- **Windows ARM64** : `forgekit_<version>_windows_arm64.zip`
 
 ### 2. Extraire l'archive
 
