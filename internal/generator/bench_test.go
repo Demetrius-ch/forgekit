@@ -67,15 +67,15 @@ func BenchmarkInitMinimal(b *testing.B) {
 
 func BenchmarkInitFull(b *testing.B) {
 	benchInit(b, projectconfig.ProjectConfig{
-		Name:          "bench-api",
-		ModulePath:    "github.com/bench/bench-api",
-		Architecture:  projectconfig.ArchitectureHexagonal,
-		Database:      projectconfig.DatabasePostgres,
-		Docker:        true,
+		Name:           "bench-api",
+		ModulePath:     "github.com/bench/bench-api",
+		Architecture:   projectconfig.ArchitectureHexagonal,
+		Database:       projectconfig.DatabasePostgres,
+		Docker:         true,
 		Authentication: projectconfig.AuthenticationJWT,
-		Documentation: projectconfig.DocumentationSwagger,
-		Tests:         projectconfig.TestStrategyUnitIntegration,
-		CI:            projectconfig.CIStrategyGitHub,
+		Documentation:  projectconfig.DocumentationSwagger,
+		Tests:          projectconfig.TestStrategyUnitIntegration,
+		CI:             projectconfig.CIStrategyGitHub,
 	})
 }
 
@@ -107,15 +107,15 @@ func BenchmarkGenerationPlan(b *testing.B) {
 	b.Helper()
 	registry := generationplan.DefaultRegistry()
 	cfg := projectconfig.ProjectConfig{
-		Name:          "bench-api",
-		ModulePath:    "github.com/bench/bench-api",
-		Architecture:  projectconfig.ArchitectureHexagonal,
-		Database:      projectconfig.DatabasePostgres,
-		Docker:        true,
+		Name:           "bench-api",
+		ModulePath:     "github.com/bench/bench-api",
+		Architecture:   projectconfig.ArchitectureHexagonal,
+		Database:       projectconfig.DatabasePostgres,
+		Docker:         true,
 		Authentication: projectconfig.AuthenticationJWT,
-		Documentation: projectconfig.DocumentationSwagger,
-		Tests:         projectconfig.TestStrategyUnitIntegration,
-		CI:            projectconfig.CIStrategyGitHub,
+		Documentation:  projectconfig.DocumentationSwagger,
+		Tests:          projectconfig.TestStrategyUnitIntegration,
+		CI:             projectconfig.CIStrategyGitHub,
 	}
 
 	b.ResetTimer()

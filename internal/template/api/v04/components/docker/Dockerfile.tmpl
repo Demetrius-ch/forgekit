@@ -34,16 +34,23 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY package*.json ./
+{{- if eq .ProjectConfig.Language "typescript" }}
+RUN npm ci
+
+COPY . .
+RUN npm run build && npm prune --omit=dev
+{{- else }}
 RUN npm ci --only=production
 
 COPY . .
+{{- end }}
 
 RUN addgroup -g 1001 -S app && adduser -S app -u 1001
 USER app
 
 EXPOSE {{ .HTTP_PORT }}
 
-CMD ["node", "src/index.{{ if eq .ProjectConfig.Language "typescript" }}ts{{ else }}js{{ end }}"]
+CMD ["node", "{{ if eq .ProjectConfig.Language "typescript" }}dist/index.js{{ else }}src/index.js{{ end }}"]
 {{- else }}
 FROM alpine:3.21
 RUN adduser -D -H app

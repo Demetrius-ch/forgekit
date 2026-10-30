@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = {{ .HTTP_PORT }}
 
-    DATABASE_URL: str = "{{ if eq .ProjectConfig.Database "postgres" }}postgresql://postgres:postgres@localhost:5432/{{ .DatabaseName }}{{ else if eq .ProjectConfig.Database "mysql" }}mysql://root:root@localhost:3306/{{ .DatabaseName }}{{ else if eq .ProjectConfig.Database "sqlite" }}sqlite:///./{{ .DatabaseName }}.db{{ else }}{{ end }}"
+    DATABASE_URL: str = "{{ if eq .ProjectConfig.Database "postgres" }}postgresql+psycopg://postgres:postgres@localhost:{{ .DB_HOST_PORT }}/{{ .DatabaseName }}{{ else if eq .ProjectConfig.Database "mysql" }}mysql+pymysql://forgekit:forgekit@localhost:{{ .DB_HOST_PORT }}/{{ .DatabaseName }}{{ else if eq .ProjectConfig.Database "sqlite" }}sqlite:///./{{ .DatabaseName }}.db{{ else }}{{ end }}"
 
     JWT_SECRET_KEY: str = "your-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"

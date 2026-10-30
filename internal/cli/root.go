@@ -50,6 +50,12 @@ func NewRootCommand() *cobra.Command {
 	}
 
 	bindGlobalFlags(root, g)
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if g.Format != output.FormatHuman && g.Format != output.FormatJSON {
+			return fmt.Errorf("format de sortie invalide %q : valeurs acceptées human, json", g.Format)
+		}
+		return nil
+	}
 	root.AddCommand(newInitCommand(g))
 	root.AddCommand(newVersionCommand(g))
 	root.AddCommand(newAddCommand(g))
@@ -170,13 +176,29 @@ func printInitSummaryOpts(projectName, modulePath, targetDir string, httpPort in
   forge doctor
   forge check
   forge analyze`, filepath.Base(targetDir))
+	} else if cfg.IsPython() {
+		nextSteps = fmt.Sprintf(`
+  cd %s
+  cp .env.example .env
+  source .venv/bin/activate
+  python -m pytest
+  python main.py
+
+  forge doctor
+  forge check
+  forge analyze`, filepath.Base(targetDir))
+	}
+
+	moduleLabel := "Module Go :    "
+	if !cfg.IsGo() {
+		moduleLabel = "Package :      "
 	}
 
 	fmt.Fprintf(os.Stdout, `
 ✓ Projet %q créé avec succès
 
   Répertoire :    %s
-  Module Go :     %s
+  %s %s
   Port HTTP :     %d
   Langage :       %s
   Architecture :  %s
@@ -191,7 +213,7 @@ Prochaines étapes recommandées :
 %s
 
 Votre projet est prêt pour une première exécution locale et pour les vérifications de qualité.
-`, projectName, targetDir, modulePath, httpPort, langLabel, archLabel, dbLine, dockerLabel, authLabel, docsLabel, testsLabel, ciLabel, nextSteps)
+`, projectName, targetDir, moduleLabel, modulePath, httpPort, langLabel, archLabel, dbLine, dockerLabel, authLabel, docsLabel, testsLabel, ciLabel, nextSteps)
 }
 
 func databaseDisplayName(db projectconfig.Database) string {

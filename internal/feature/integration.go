@@ -64,6 +64,12 @@ func findMainPath(projectRoot string) string {
 	return ""
 }
 
+// FindRouterPath returns the router file of a supported architecture layout,
+// or an empty string when the project has none.
+func FindRouterPath(projectRoot string) string {
+	return findRouterPath(projectRoot)
+}
+
 // resolveRouterPath returns the explicit path or auto-detects it.
 func resolveRouterPath(projectRoot string, integration RouterIntegration) (string, error) {
 	if integration.RouterPath != "" {
@@ -131,6 +137,24 @@ func IntegrateRouterGo(projectRoot string, integration RouterIntegration) error 
 				lines[i] = line + "\n\t" + integration.MiddlewareCall
 				found = true
 				break
+			}
+		}
+		// Routers generated since v0.4 have no middleware stack: chi requires
+		// middlewares before any route, so they go right after the router is
+		// created, while route registrations go just before "return r".
+		if !found {
+			isMiddleware := strings.HasPrefix(integration.MiddlewareCall, "r.Use(")
+			for i, line := range lines {
+				if isMiddleware && strings.Contains(line, "chi.NewRouter()") {
+					lines[i] = line + "\n\t" + integration.MiddlewareCall
+					found = true
+					break
+				}
+				if !isMiddleware && strings.TrimSpace(line) == "return r" {
+					lines[i] = "\t" + integration.MiddlewareCall + "\n" + line
+					found = true
+					break
+				}
 			}
 		}
 		if !found {
@@ -297,6 +321,20 @@ func IntegrateMainGo(projectRoot string, integration MainIntegration) error {
 	} else {
 		if strings.Contains(src, importCheck) {
 			return nil // Already integrated
+		}
+		// A regular import is only valid if a replacement actually uses the
+		// package; otherwise main.go would no longer compile (unused import).
+		used := false
+		pkgRef := filepath.Base(integration.ImportPath) + "."
+		for _, repl := range integration.Replacements {
+			if (repl.Check == "" || strings.Contains(src, repl.Check)) &&
+				strings.Contains(src, repl.OldStr) && strings.Contains(repl.NewStr, pkgRef) {
+				used = true
+				break
+			}
+		}
+		if !used {
+			return nil // Nothing to integrate in this main.go layout
 		}
 	}
 

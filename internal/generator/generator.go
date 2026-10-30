@@ -36,9 +36,6 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	if err := ValidateProjectName(opts.ProjectName); err != nil {
 		return nil, err
 	}
-	if err := ValidateModulePath(opts.ModulePath); err != nil {
-		return nil, err
-	}
 	if err := ValidateHTTPPort(opts.HTTPPort); err != nil {
 		return nil, err
 	}
@@ -54,6 +51,9 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	projectConfig := opts.ProjectConfig
 	if projectConfig.IsZero() {
 		projectConfig = projectconfig.Default(opts.ProjectName, opts.ModulePath)
+	}
+	if err := ValidateModulePathFor(opts.ModulePath, projectConfig.Language); err != nil {
+		return nil, err
 	}
 	if projectConfig.Name != opts.ProjectName {
 		return nil, fmt.Errorf("project configuration name %q does not match init project name %q", projectConfig.Name, opts.ProjectName)
@@ -343,6 +343,22 @@ func ValidateModulePath(module string) error {
 	}
 	if !strings.Contains(module, "/") {
 		return fmt.Errorf("le chemin du module doit être au format github.com/owner/name")
+	}
+	return nil
+}
+
+// ValidateModulePathFor validates the module path for the project language:
+// a Go module path for Go projects, a package name for the other languages.
+func ValidateModulePathFor(module string, language projectconfig.Language) error {
+	if language == "" || language == projectconfig.LanguageGo {
+		return ValidateModulePath(module)
+	}
+	module = strings.TrimSpace(module)
+	if module == "" {
+		return fmt.Errorf("le nom du package ne peut pas être vide")
+	}
+	if strings.ContainsAny(module, " \t") {
+		return fmt.Errorf("le nom du package ne peut pas contenir d'espaces")
 	}
 	return nil
 }

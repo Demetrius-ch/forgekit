@@ -5,7 +5,8 @@ services:
       dockerfile: docker/Dockerfile
     environment:
       HTTP_ADDR: "0.0.0.0:8080"
-      DATABASE_URL: "file:/data/{{ .DatabaseName }}.db?_pragma=foreign_keys(1)"
+      PORT: "8080"
+      DATABASE_URL: "{{ if eq .ProjectConfig.Language "go" }}file:/data/{{ .DatabaseName }}.db?_pragma=foreign_keys(1){{ else if eq .ProjectConfig.Language "python" }}sqlite:////data/{{ .DatabaseName }}.db{{ else }}file:/data/{{ .DatabaseName }}.db{{ end }}"
 {{- if eq .ProjectConfig.Authentication "jwt" }}
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env}"
 {{- end }}

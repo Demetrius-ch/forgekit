@@ -22,4 +22,3 @@ type FeatureDependencies interface {
 type FeatureRemover interface {
 	Remove(ctx context.Context, project ProjectContext, plan Plan) error
 }
-

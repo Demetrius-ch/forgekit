@@ -23,7 +23,6 @@ import (
 	"github.com/Demetrius-ch/forgekit/internal/output"
 	"github.com/Demetrius-ch/forgekit/internal/ports"
 	"github.com/Demetrius-ch/forgekit/internal/projectconfig"
-	"github.com/Demetrius-ch/forgekit/internal/prompt"
 	"github.com/Demetrius-ch/forgekit/internal/report"
 	"github.com/Demetrius-ch/forgekit/internal/rules"
 	"github.com/spf13/cobra"
@@ -74,8 +73,10 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				}
 			}
 
+			// Same precedence as the final configuration below: an explicit
+			// --database flag wins over the --config file.
 			selectedDatabase := projectconfig.Database(database)
-			if configFile != "" {
+			if configFile != "" && !cmd.Flags().Changed("database") {
 				fileConfiguration, loadErr := projectconfig.LoadFile(configFile)
 				if loadErr != nil {
 					return loadErr
@@ -134,7 +135,7 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 					opts.ModulePath = defaultModulePath(projectName)
 				}
 			} else {
-				p := prompt.New(os.Stdin, os.Stdout)
+				p := stdinPrompter()
 				fmt.Fprintf(os.Stdout, "\nConfiguration du projet %q\n\n", projectName)
 				moduleLabel := "Chemin du module Go"
 				if projectconfig.Language(language) == projectconfig.LanguagePython {
@@ -165,9 +166,6 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				}
 			}
 
-			if err := generator.ValidateModulePath(opts.ModulePath); err != nil {
-				return err
-			}
 			if err := generator.ValidateHTTPPort(opts.HTTPPort); err != nil {
 				return err
 			}
@@ -216,7 +214,7 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				projectConfiguration.CI = projectconfig.CIStrategy(ciStrategy)
 			}
 			if !nonInteractive && !dryRun && configFile == "" {
-				p := prompt.New(os.Stdin, os.Stdout)
+				p := stdinPrompter()
 				if language, err = p.AskString("Langage (go, typescript, javascript, python)", string(projectConfiguration.Language)); err != nil {
 					return err
 				}
@@ -263,6 +261,23 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 			if err := projectConfiguration.Validate(); err != nil {
 				return err
 			}
+			// Ports were selected for the database known before the prompts;
+			// re-select them if the interactive answer changed the engine.
+			if projectConfiguration.Database != selectedDatabase {
+				portSelection, err = selectPortsForDatabase(g, opts.HTTPPort, 0, dryRun, projectConfiguration.Database)
+				if err != nil {
+					return err
+				}
+				opts.HTTPPort = portSelection.HTTPPort
+				opts.PostgresHostPort = portSelection.DBHostPort
+				if projectConfiguration.Database != projectconfig.DatabasePostgres {
+					opts.UseExistingDB = false
+					opts.ExternalDBHost, opts.ExternalDBPort, opts.ExternalDBUser, opts.ExternalDBPassword, opts.ExternalDBName = "", 0, "", "", ""
+				}
+			}
+			if err := generator.ValidateModulePathFor(opts.ModulePath, projectConfiguration.Language); err != nil {
+				return err
+			}
 			opts.ProjectConfig = projectConfiguration
 
 			gen, err := generator.New()
@@ -291,7 +306,9 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				progress.Step(fmt.Sprintf("Documentation : %s", docsDisplayName(opts.ProjectConfig.Documentation)), 0)
 				progress.Step(fmt.Sprintf("Tests : %s", testsDisplayName(opts.ProjectConfig.Tests)), 0)
 				progress.Step(fmt.Sprintf("CI : %s", ciDisplayName(opts.ProjectConfig.CI)), 0)
-				fmt.Fprintln(os.Stdout)
+				if g.Format == output.FormatHuman && !g.Quiet {
+					fmt.Fprintln(os.Stdout)
+				}
 			}
 
 			genStart := time.Now()
@@ -325,6 +342,7 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 					Project        string `json:"project"`
 					Module         string `json:"module"`
 					Directory      string `json:"directory"`
+					Language       string `json:"language"`
 					Architecture   string `json:"architecture"`
 					Database       string `json:"database"`
 					Docker         bool   `json:"docker"`
@@ -341,6 +359,7 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 					Project:        opts.ProjectName,
 					Module:         opts.ModulePath,
 					Directory:      absDir,
+					Language:       string(opts.ProjectConfig.Language),
 					Architecture:   string(opts.ProjectConfig.Architecture),
 					Database:       string(opts.ProjectConfig.Database),
 					Docker:         opts.ProjectConfig.Docker,
@@ -473,8 +492,12 @@ func selectPortsForDatabase(g *globalFlags, requestedHTTPPort, requestedDBPort i
 		if db != projectconfig.DatabaseNone && db != projectconfig.DatabaseSQLite {
 			displayName := dbDisplayName(db)
 			fmt.Fprintf(os.Stdout, "Port %s :\n", displayName)
-			fmt.Fprintf(os.Stdout, "  demandé : %d\n", requestedDBPort)
-			if requestedDBPort != 0 && requestedDBPort != dbHostPort {
+			requestedDisplay := requestedDBPort
+			if requestedDisplay == 0 {
+				requestedDisplay = defaultDBPort(db)
+			}
+			fmt.Fprintf(os.Stdout, "  demandé : %d\n", requestedDisplay)
+			if requestedDisplay != dbHostPort {
 				fmt.Fprintf(os.Stdout, "  statut : occupé\n")
 			} else {
 				fmt.Fprintf(os.Stdout, "  statut : disponible\n")
@@ -638,7 +661,7 @@ func selectDatabase(
 			fmt.Fprintln(os.Stdout, "  3. Annuler")
 			fmt.Fprintln(os.Stdout)
 
-			p := prompt.New(os.Stdin, os.Stdout)
+			p := stdinPrompter()
 			choice, err := p.AskInt("Choix", 1)
 			if err != nil {
 				return DatabaseSelection{}, err
@@ -685,7 +708,7 @@ func selectDatabase(
 	fmt.Fprintln(os.Stdout, "  3. Annuler")
 	fmt.Fprintln(os.Stdout)
 
-	p := prompt.New(os.Stdin, os.Stdout)
+	p := stdinPrompter()
 	choice, err := p.AskInt("Choix", 1)
 	if err != nil {
 		return DatabaseSelection{}, err
@@ -740,7 +763,7 @@ func selectExistingDatabase(
 		return DatabaseSelection{}, fmt.Errorf("mode non-interactif: impossible de choisir une base automatiquement")
 	}
 
-	p := prompt.New(os.Stdin, os.Stdout)
+	p := stdinPrompter()
 	choice, err := p.AskInt("Choisissez une base", 1)
 	if err != nil {
 		return DatabaseSelection{}, err
@@ -830,7 +853,7 @@ func selectExistingDatabase(
 
 // askExternalDatabase prompts the user if the database is external and collects connection details.
 func askExternalDatabase(g *globalFlags, databaseName, existingDBName string) (DatabaseSelection, error) {
-	p := prompt.New(os.Stdin, os.Stdout)
+	p := stdinPrompter()
 
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintln(os.Stdout, "Cette base est-elle hébergée sur un serveur PostgreSQL externe (pas sur localhost) ?")
@@ -1233,7 +1256,7 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 		if hasWarnings {
 			return &CiError{Code: 1, Err: fmt.Errorf("warnings détectés : %d warning(s)", res.Summary.Warning)}
 		}
-		return &CiError{Code: 0, Err: nil}
+		return nil // success: exit code 0, nothing printed on stderr
 	}
 
 	if report.HasFailures(res.Summary) {
@@ -1465,7 +1488,7 @@ func checkDoctorExitCode(g *globalFlags, root string, extraFindings []report.Fin
 	if hasWarnings {
 		return &CiError{Code: 1, Err: fmt.Errorf("warnings détectés : %d warning(s)", res.Summary.Warning)}
 	}
-	return &CiError{Code: 0, Err: nil}
+	return nil // success: exit code 0, nothing printed on stderr
 }
 
 // printDoctorCiSummary prints a compact summary for doctor CI mode.
@@ -1827,8 +1850,12 @@ func runFeatureAdd(
 	}
 
 	// Check if project language supports features
+	// Features only ship Go implementations (go.mod, router.go, main.go).
 	if project.Language == feature.LanguagePython {
 		return fmt.Errorf("forge add n'est pas encore supporté pour les projets Python")
+	}
+	if project.Language == feature.LanguageTypeScript || project.Language == feature.LanguageJavaScript {
+		return fmt.Errorf("forge add n'est pas encore supporté pour les projets %s", project.Language)
 	}
 
 	// Step 2: Find feature
@@ -1940,17 +1967,25 @@ func runFeatureAdd(
 		fmt.Fprintln(console.Out, "Installation...")
 	}
 
-	// Create snapshot for rollback
-	snapshot, err := createInstallSnapshot(project.Root)
+	// Create snapshot for rollback, covering every file the features may write
+	var installPlans []feature.Plan
+	for _, feat := range featuresToInstall {
+		if featPlan, planErr := feat.Plan(ctx, project); planErr == nil {
+			installPlans = append(installPlans, featPlan)
+		}
+	}
+	snapshot, err := createInstallSnapshot(project.Root, snapshotPaths(project.Root, installPlans...)...)
 	if err != nil {
 		return fmt.Errorf("créer snapshot pour rollback: %w", err)
 	}
 
 	// Install each feature in order
+	var installedNames, skippedNames []string
 	for _, feat := range featuresToInstall {
 		// Check if already installed
 		installed, _, _ := feature.IsInstalled(project.Root, feat.Name())
 		if installed {
+			skippedNames = append(skippedNames, feat.Name())
 			if g.Format == output.FormatHuman && !g.Quiet {
 				fmt.Fprintf(console.Out, "  ✓ %s déjà installé, ignoré\n", feat.Name())
 			}
@@ -1986,6 +2021,7 @@ func runFeatureAdd(
 			return fmt.Errorf("installation de %s: %w", feat.Name(), err)
 		}
 
+		installedNames = append(installedNames, feat.Name())
 		if spinner != nil {
 			spinner.Stop(fmt.Sprintf("✓ %s installé", feat.Name()))
 		}
@@ -2003,6 +2039,24 @@ func runFeatureAdd(
 	}
 
 	totalDuration := time.Since(addStart)
+	if g.Format == output.FormatJSON {
+		type addResult struct {
+			SchemaVersion string   `json:"schema_version"`
+			Status        string   `json:"status"`
+			Feature       string   `json:"feature"`
+			Installed     []string `json:"installed"`
+			Skipped       []string `json:"skipped"`
+			DurationMs    int64    `json:"duration_ms"`
+		}
+		return console.PrintJSON(addResult{
+			SchemaVersion: report.JSONSchemaVersion,
+			Status:        "installed",
+			Feature:       name,
+			Installed:     append([]string{}, installedNames...),
+			Skipped:       append([]string{}, skippedNames...),
+			DurationMs:    totalDuration.Milliseconds(),
+		})
+	}
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
 		fmt.Fprintln(console.Out, "────────────────────────────────")
@@ -2055,8 +2109,12 @@ func runFeatureRemove(
 	}
 
 	// Check if project language supports features
+	// Features only ship Go implementations (go.mod, router.go, main.go).
 	if project.Language == feature.LanguagePython {
 		return fmt.Errorf("forge remove n'est pas encore supporté pour les projets Python")
+	}
+	if project.Language == feature.LanguageTypeScript || project.Language == feature.LanguageJavaScript {
+		return fmt.Errorf("forge remove n'est pas encore supporté pour les projets %s", project.Language)
 	}
 
 	// Step 2: Find feature
@@ -2147,7 +2205,7 @@ func runFeatureRemove(
 	}
 
 	// Create snapshot for rollback
-	snapshot, err := createInstallSnapshot(project.Root)
+	snapshot, err := createInstallSnapshot(project.Root, snapshotPaths(project.Root, plan)...)
 	if err != nil {
 		return fmt.Errorf("créer snapshot pour rollback: %w", err)
 	}
@@ -2183,6 +2241,20 @@ func runFeatureRemove(
 	}
 
 	totalDuration := time.Since(removeStart)
+	if g.Format == output.FormatJSON {
+		type removeResult struct {
+			SchemaVersion string `json:"schema_version"`
+			Status        string `json:"status"`
+			Feature       string `json:"feature"`
+			DurationMs    int64  `json:"duration_ms"`
+		}
+		return console.PrintJSON(removeResult{
+			SchemaVersion: report.JSONSchemaVersion,
+			Status:        "removed",
+			Feature:       name,
+			DurationMs:    totalDuration.Milliseconds(),
+		})
+	}
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
 		fmt.Fprintln(console.Out, "────────────────────────────────")
@@ -2419,12 +2491,46 @@ type InstallSnapshot struct {
 	GoSumContent []byte
 	ForgeDirPath string
 	ForgeFiles   map[string][]byte
+	// Files maps project-relative paths to their previous content; a nil
+	// value means the file did not exist and must be deleted on rollback.
+	Files map[string][]byte
 }
 
-// createInstallSnapshot captures the current state of key project files.
-func createInstallSnapshot(projectRoot string) (*InstallSnapshot, error) {
+// snapshotPaths lists the files a feature operation may write: .env.example,
+// the router and main.go integration points, and the files of the given plans.
+func snapshotPaths(projectRoot string, plans ...feature.Plan) []string {
+	paths := []string{".env.example"}
+	if router := feature.FindRouterPath(projectRoot); router != "" {
+		if rel, err := filepath.Rel(projectRoot, router); err == nil {
+			paths = append(paths, rel)
+		}
+	}
+	paths = append(paths, filepath.Join("cmd", "server", "main.go"), filepath.Join("cmd", "main.go"))
+	for _, plan := range plans {
+		for _, file := range plan.Files {
+			paths = append(paths, file.Destination)
+		}
+	}
+	return paths
+}
+
+// createInstallSnapshot captures the current state of key project files,
+// plus extraPaths (relative to projectRoot).
+func createInstallSnapshot(projectRoot string, extraPaths ...string) (*InstallSnapshot, error) {
 	snapshot := &InstallSnapshot{
 		ForgeFiles: make(map[string][]byte),
+		Files:      make(map[string][]byte),
+	}
+
+	for _, rel := range extraPaths {
+		data, err := os.ReadFile(filepath.Join(projectRoot, rel))
+		if err == nil {
+			snapshot.Files[rel] = data
+		} else if os.IsNotExist(err) {
+			snapshot.Files[rel] = nil
+		} else {
+			return nil, fmt.Errorf("lire %s : %w", rel, err)
+		}
 	}
 
 	// Snapshot go.mod
@@ -2493,8 +2599,33 @@ func restoreInstallSnapshot(projectRoot string, snapshot *InstallSnapshot) error
 		}
 	}
 
-	// Run go mod tidy to restore consistency
-	_ = feature.RunGoModTidy(projectRoot)
+	// Restore or delete the other captured files. Directories left empty by
+	// deleted files (e.g. internal/cors) are removed as well.
+	for relPath, data := range snapshot.Files {
+		fullPath := filepath.Join(projectRoot, relPath)
+		if data == nil {
+			if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("supprimer %s: %w", relPath, err)
+			}
+			for dir := filepath.Dir(fullPath); dir != projectRoot && strings.HasPrefix(dir, projectRoot); dir = filepath.Dir(dir) {
+				if os.Remove(dir) != nil {
+					break // not empty (or already gone)
+				}
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			return fmt.Errorf("créer répertoire %s: %w", filepath.Dir(fullPath), err)
+		}
+		if err := os.WriteFile(fullPath, data, 0o644); err != nil {
+			return fmt.Errorf("restaurer %s: %w", relPath, err)
+		}
+	}
+
+	// Run go mod tidy to restore consistency (Go projects only)
+	if len(snapshot.GoModContent) > 0 {
+		_ = feature.RunGoModTidy(projectRoot)
+	}
 
 	return nil
 }

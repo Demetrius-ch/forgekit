@@ -248,10 +248,6 @@ func TypeScriptRegistry() Registry {
 		},
 		documentation: map[projectconfig.Documentation]Component{
 			projectconfig.DocumentationNone: staticComponent{name: "documentation:none"},
-			projectconfig.DocumentationSwagger: staticComponent{
-				name:  "documentation:swagger",
-				files: files("documentation:swagger", "v04/languages/typescript/base/package.json.tmpl", "package.json"),
-			},
 		},
 		tests: map[projectconfig.TestStrategy]Component{
 			projectconfig.TestStrategyUnit: staticComponent{
@@ -365,10 +361,6 @@ func JavaScriptRegistry() Registry {
 		},
 		documentation: map[projectconfig.Documentation]Component{
 			projectconfig.DocumentationNone: staticComponent{name: "documentation:none"},
-			projectconfig.DocumentationSwagger: staticComponent{
-				name:  "documentation:swagger",
-				files: files("documentation:swagger", "v04/languages/javascript/base/package.json.tmpl", "package.json"),
-			},
 		},
 		tests: map[projectconfig.TestStrategy]Component{
 			projectconfig.TestStrategyUnit: staticComponent{
@@ -452,21 +444,20 @@ func PythonRegistry() Registry {
 				files: files("database:postgres",
 					"v04/languages/python/components/database/postgres/database.py.tmpl", "database.py",
 				),
-				dependencies: []Dependency{{Module: "asyncpg", Version: ">=0.29.0", Reason: "PostgreSQL async driver"}},
+				dependencies: []Dependency{{Module: "psycopg[binary]", Version: ">=3.1.18", Reason: "PostgreSQL driver"}},
 			},
 			projectconfig.DatabaseMySQL: staticComponent{
 				name: "database:mysql",
 				files: files("database:mysql",
 					"v04/languages/python/components/database/mysql/database.py.tmpl", "database.py",
 				),
-				dependencies: []Dependency{{Module: "aiomysql", Version: ">=0.2.0", Reason: "MySQL async driver"}},
+				dependencies: []Dependency{{Module: "pymysql", Version: ">=1.1.0", Reason: "MySQL driver"}},
 			},
 			projectconfig.DatabaseSQLite: staticComponent{
 				name: "database:sqlite",
 				files: files("database:sqlite",
 					"v04/languages/python/components/database/sqlite/database.py.tmpl", "database.py",
 				),
-				dependencies: []Dependency{{Module: "aiosqlite", Version: ">=0.19.0", Reason: "SQLite async driver"}},
 			},
 			projectconfig.DatabaseNone: staticComponent{name: "database:none"},
 		},
@@ -488,33 +479,29 @@ func PythonRegistry() Registry {
 		},
 		documentation: map[projectconfig.Documentation]Component{
 			projectconfig.DocumentationNone: staticComponent{name: "documentation:none"},
-			projectconfig.DocumentationSwagger: staticComponent{
-				name:  "documentation:swagger",
-				files: files("documentation:swagger", "v04/languages/python/base/requirements.txt.tmpl", "requirements.txt"),
-			},
+			// FastAPI serves the OpenAPI schema and Swagger UI (/docs) natively.
+			projectconfig.DocumentationSwagger: staticComponent{name: "documentation:swagger"},
 		},
 		tests: map[projectconfig.TestStrategy]Component{
 			projectconfig.TestStrategyUnit: staticComponent{
-				name:  "tests:unit",
+				name: "tests:unit",
 				files: files("tests:unit",
 					"v04/languages/python/components/tests/unit/conftest.py.tmpl", "tests/conftest.py",
 					"v04/languages/python/components/tests/unit/test_health.py.tmpl", "tests/test_health.py",
 				),
 				dependencies: []Dependency{
 					{Module: "pytest", Version: ">=7.4.4", Reason: "Test framework"},
-					{Module: "pytest-asyncio", Version: ">=0.23.0", Reason: "Async test support"},
 					{Module: "httpx", Version: ">=0.26.0", Reason: "HTTP client for testing"},
 				},
 			},
 			projectconfig.TestStrategyUnitIntegration: staticComponent{
-				name:  "tests:unit-integration",
+				name: "tests:unit-integration",
 				files: files("tests:unit-integration",
 					"v04/languages/python/components/tests/unit/conftest.py.tmpl", "tests/conftest.py",
 					"v04/languages/python/components/tests/unit/test_health.py.tmpl", "tests/test_health.py",
 				),
 				dependencies: []Dependency{
 					{Module: "pytest", Version: ">=7.4.4", Reason: "Test framework"},
-					{Module: "pytest-asyncio", Version: ">=0.23.0", Reason: "Async test support"},
 					{Module: "httpx", Version: ">=0.26.0", Reason: "HTTP client for testing"},
 				},
 			},

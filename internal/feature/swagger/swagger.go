@@ -39,8 +39,12 @@ func (SwaggerFeature) Check(ctx context.Context, project feature.ProjectContext)
 		return fmt.Errorf("swagger version %s déjà installée", existing.Version)
 	}
 
+	// router.go location depends on the architecture (hexagonal, clean, layered).
+	if feature.FindRouterPath(project.Root) == "" {
+		return fmt.Errorf("fichier requis manquant : %s", filepath.Join(project.Root, "internal", "transport", "http", "router.go"))
+	}
+
 	requiredPaths := []string{
-		filepath.Join(project.Root, "internal", "transport", "http", "router.go"),
 		filepath.Join(project.Root, "cmd", "server", "main.go"),
 		filepath.Join(project.Root, "go.mod"),
 	}

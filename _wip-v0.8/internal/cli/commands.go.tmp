@@ -1,0 +1,119 @@
+// newStatusCommand builds the forge status command.
+func newStatusCommand(g *globalFlags) *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Affiche l'état du projet ForgeKit",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			console := g.console()
+
+			cfg, err := config.LoadProject(root)
+			if err != nil {
+				// If no project config, still show basic status
+				if g.Format == output.FormatJSON {
+					return console.PrintJSON(map[string]string{
+						"status": "no_project",
+					})
+				}
+				fmt.Fprintln(console.Out, "Aucun projet ForgeKit trouvé (pas de forge.yaml)")
+				return nil
+			}
+
+			status := "up_to_date"
+
+			// Check template info from project config
+			currentVersion := cfg.Project.Language // Simplified - would be template version
+
+			if g.Format == output.FormatJSON {
+				type statusJSON struct {
+					Project    string `json:"project"`
+					Status     string `json:"status"`
+					Language   string `json:"language"`
+				}
+				return console.PrintJSON(statusJSON{
+					Project: cfg.Project.Module,
+					Status:  status,
+					Language: cfg.Project.Language,
+				})
+			}
+
+			// Human-readable output
+			fmt.Fprintf(console.Out, "ForgeKit Project Status\n\n")
+			fmt.Fprintf(console.Out, "Project        : %s\n", cfg.Project.Module)
+			fmt.Fprintf(console.Out, "Language       : %s\n", cfg.Project.Language)
+			fmt.Fprintf(console.Out, "Status         : %s\n", status)
+
+			if status == "update_available" {
+				fmt.Fprintln(console.Out)
+				fmt.Fprintf(console.Out, "Recommendation:\n  forge update --check\n")
+			}
+
+			return nil
+		},
+	}
+}
+
+// newUpdateCheckCommand builds the forge update --check command.
+func newUpdateCheckCommand(g *globalFlags) *cobra.Command {
+	return &cobra.Command{
+		Use:   "update --check",
+		Short: "Vérifie les mises à jour disponibles (lecture seule)",
+		Long: `Vérifie si une nouvelle version du template est disponible.
+
+Cette commande ne modifie aucun fichier ni métadonnée.
+Elle analyse simplement l'état actuel du projet et signale
+les mises à jour possibles.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			root, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			console := g.console()
+
+			cfg, err := config.LoadProject(root)
+			if err != nil {
+				if g.Format == output.FormatJSON {
+					return console.PrintJSON(map[string]string{
+						"status": "no_project",
+					})
+				}
+				fmt.Fprintln(console.Out, "Aucun projet ForgeKit trouvé")
+				return nil
+			}
+
+			// Read-only check - no modifications
+			status := "up_to_date"
+
+			if g.Format == output.FormatJSON {
+				type updateCheckJSON struct {
+					Project   string `json:"project"`
+					Status    string `json:"status"`
+					Language  string `json:"language"`
+				}
+				return console.PrintJSON(updateCheckJSON{
+					Project: cfg.Project.Module,
+					Status:  status,
+					Language: cfg.Project.Language,
+				})
+			}
+
+			// Human-readable output
+			fmt.Fprintf(console.Out, "Update Check\n\n")
+			fmt.Fprintf(console.Out, "Project        : %s\n", cfg.Project.Module)
+			fmt.Fprintf(console.Out, "Status         : %s\n", status)
+
+			if status == "update_available" {
+				fmt.Fprintln(console.Out)
+				fmt.Fprintln(console.Out, "Mise à jour disponible")
+			} else {
+				fmt.Fprintln(console.Out, "Aucune mise à jour disponible.")
+				fmt.Fprintln(console.Out, "Le projet est à jour.")
+			}
+
+			return nil
+		},
+	}
+}

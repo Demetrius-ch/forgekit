@@ -39,8 +39,12 @@ func (CorsFeature) Check(ctx context.Context, project feature.ProjectContext) er
 		return fmt.Errorf("cors version %s déjà installée", existing.Version)
 	}
 
+	// router.go location depends on the architecture (hexagonal, clean, layered).
+	if feature.FindRouterPath(project.Root) == "" {
+		return fmt.Errorf("fichier requis manquant : %s", filepath.Join(project.Root, "internal", "transport", "http", "router.go"))
+	}
+
 	requiredPaths := []string{
-		filepath.Join(project.Root, "internal", "transport", "http", "router.go"),
 		filepath.Join(project.Root, "cmd", "server", "main.go"),
 		filepath.Join(project.Root, "go.mod"),
 	}
@@ -127,7 +131,7 @@ func (CorsFeature) Apply(ctx context.Context, project feature.ProjectContext, pl
 	if err := feature.IntegrateRouterGo(project.Root, feature.RouterIntegration{
 		ModulePath:      project.Module,
 		ImportPath:      project.Module + "/internal/cors",
-		MiddlewareCall:  "cors.Middleware()",
+		MiddlewareCall:  "r.Use(cors.Middleware())",
 		MiddlewareCheck: "cors.Middleware()",
 	}); err != nil {
 		return fmt.Errorf("intégrer dans router.go : %w", err)
@@ -168,7 +172,7 @@ func (CorsFeature) Remove(ctx context.Context, project feature.ProjectContext, p
 	if err := feature.RemoveRouterGo(project.Root, feature.RouterIntegration{
 		ModulePath:      project.Module,
 		ImportPath:      project.Module + "/internal/cors",
-		MiddlewareCall:  "cors.Middleware()",
+		MiddlewareCall:  "r.Use(cors.Middleware())",
 		MiddlewareCheck: "cors.Middleware()",
 	}); err != nil {
 		return fmt.Errorf("supprimer intégration router.go : %w", err)

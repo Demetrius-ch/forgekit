@@ -9,9 +9,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+{{- if eq .ProjectConfig.Language "python" }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest
+{{- else if or (eq .ProjectConfig.Language "typescript") (eq .ProjectConfig.Language "javascript") }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npm test
+{{- if eq .ProjectConfig.Language "typescript" }}
+      - run: npm run build
+{{- end }}
+{{- else }}
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
       - run: go vet ./...
       - run: go test ./...
       - run: go build ./...
+{{- end }}

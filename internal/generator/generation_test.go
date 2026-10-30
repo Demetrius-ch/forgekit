@@ -261,8 +261,8 @@ func TestGenCaseG_InvalidConfig(t *testing.T) {
 	cfg := projectconfig.ProjectConfig{
 		Name:         "case-g",
 		ModulePath:   "github.com/test/case-g",
-		Language:       projectconfig.LanguageGo,
-		Runtime:        projectconfig.RuntimeNone,
+		Language:     projectconfig.LanguageGo,
+		Runtime:      projectconfig.RuntimeNone,
 		Architecture: "invalid",
 		Database:     "invalid",
 	}

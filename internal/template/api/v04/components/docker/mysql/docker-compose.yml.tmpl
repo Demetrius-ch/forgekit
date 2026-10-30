@@ -25,7 +25,8 @@ services:
         condition: service_healthy
     environment:
       HTTP_ADDR: "0.0.0.0:8080"
-      DATABASE_URL: "forgekit:forgekit@tcp(mysql:3306)/{{ .DatabaseName }}?parseTime=true"
+      PORT: "8080"
+      DATABASE_URL: "{{ if eq .ProjectConfig.Language "go" }}forgekit:forgekit@tcp(mysql:3306)/{{ .DatabaseName }}?parseTime=true{{ else if eq .ProjectConfig.Language "python" }}mysql+pymysql://forgekit:forgekit@mysql:3306/{{ .DatabaseName }}{{ else }}mysql://forgekit:forgekit@mysql:3306/{{ .DatabaseName }}{{ end }}"
 {{- if eq .ProjectConfig.Authentication "jwt" }}
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env}"
 {{- end }}

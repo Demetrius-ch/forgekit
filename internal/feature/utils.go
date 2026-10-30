@@ -145,7 +145,20 @@ func UpdateEnvironment(projectRoot string, envVars []string) error {
 		}
 	}
 
+	// Skip variables already defined, so re-installing a feature (or two
+	// features sharing a variable) does not duplicate keys.
+	defined := make(map[string]bool)
+	for _, line := range strings.Split(string(oldContent), "\n") {
+		if key, _, ok := strings.Cut(strings.TrimSpace(line), "="); ok {
+			defined[key] = true
+		}
+	}
 	for _, env := range envVars {
+		key, _, _ := strings.Cut(env, "=")
+		if defined[key] {
+			continue
+		}
+		defined[key] = true
 		newContent.WriteString(env + "\n")
 	}
 
