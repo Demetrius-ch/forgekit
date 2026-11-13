@@ -44,7 +44,7 @@ func (SwaggerFeature) Check(ctx context.Context, project feature.ProjectContext)
 	}
 
 	// Projects created with `forge init --docs swagger` already register the routes.
-	if router, err := os.ReadFile(feature.RouterPath(project.Root)); err == nil && strings.Contains(string(router), "swagger.RegisterRoutes") {
+	if router, err := os.ReadFile(feature.FindRouterPath(project.Root)); err == nil && strings.Contains(string(router), "swagger.RegisterRoutes") {
 		return fmt.Errorf("swagger : routes déjà enregistrées dans le router, %w", feature.ErrAlreadyInstalled)
 	}
 

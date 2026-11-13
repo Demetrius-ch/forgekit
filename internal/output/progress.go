@@ -139,16 +139,16 @@ func (p *humanProgress) successSymbol() string {
 
 // jsonProgress renders structured JSON events for machine consumption.
 type jsonProgress struct {
-	out      io.Writer
-	events   []progressEvent
-	start    time.Time
+	out    io.Writer
+	events []progressEvent
+	start  time.Time
 }
 
 type progressEvent struct {
-	Name       string  `json:"name"`
-	DurationMs int64   `json:"duration_ms,omitempty"`
-	Status     string  `json:"status"`
-	Message    string  `json:"message,omitempty"`
+	Name       string `json:"name"`
+	DurationMs int64  `json:"duration_ms,omitempty"`
+	Status     string `json:"status"`
+	Message    string `json:"message,omitempty"`
 }
 
 func newJSONProgress(out io.Writer) *jsonProgress {
@@ -201,15 +201,15 @@ func (p *jsonProgress) FinishError(name string) {
 // silentProgress suppresses all output (quiet mode).
 type silentProgress struct{}
 
-func (silentProgress) Title(string)                      {}
-func (silentProgress) Step(string, time.Duration)        {}
-func (silentProgress) StepStart(string)                  {}
-func (silentProgress) StepDone(time.Duration)            {}
-func (silentProgress) Warning(string)                    {}
-func (silentProgress) Info(string)                       {}
-func (silentProgress) Error(string)                     {}
-func (silentProgress) Finish(string, time.Duration)      {}
-func (silentProgress) FinishError(string)                {}
+func (silentProgress) Title(string)                 {}
+func (silentProgress) Step(string, time.Duration)   {}
+func (silentProgress) StepStart(string)             {}
+func (silentProgress) StepDone(time.Duration)       {}
+func (silentProgress) Warning(string)               {}
+func (silentProgress) Info(string)                  {}
+func (silentProgress) Error(string)                 {}
+func (silentProgress) Finish(string, time.Duration) {}
+func (silentProgress) FinishError(string)           {}
 
 // NewProgress creates the appropriate Progress implementation based on format and quiet settings.
 func NewProgress(out io.Writer, format Format, quiet bool) Progress {

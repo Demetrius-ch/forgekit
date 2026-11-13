@@ -2,12 +2,15 @@ package output
 
 import (
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 )
 
-// Spinner is a minimal, dependency-free terminal spinner used only in human mode.
+// Spinner is a minimal terminal spinner used only in human mode.
 type Spinner struct {
 	out           io.Writer
 	frames        []rune
@@ -16,15 +19,24 @@ type Spinner struct {
 	stop          chan struct{}
 	done          chan struct{}
 	lastLineWidth int
+	static        bool // output is not a terminal: no animation
+	active        bool // static mode: Start called, Stop pending
 }
 
 // NewSpinner creates a spinner that writes to out.
 func NewSpinner(out io.Writer) *Spinner {
+	// Animation frames on a file that is not a terminal (pipe, CI log,
+	// redirect) end up as garbage in the output: only print final lines.
+	static := false
+	if f, ok := out.(*os.File); ok && !term.IsTerminal(int(f.Fd())) {
+		static = true
+	}
 	return &Spinner{
 		out:    out,
 		frames: []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'},
 		delay:  80 * time.Millisecond,
 		stop:   nil,
+		static: static,
 	}
 }
 
@@ -32,6 +44,10 @@ func NewSpinner(out io.Writer) *Spinner {
 func (s *Spinner) Start(msg string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.static {
+		s.active = true
+		return
+	}
 	if s.stop != nil {
 		return
 	}
@@ -61,6 +77,16 @@ func (s *Spinner) Start(msg string) {
 
 // Stop stops the spinner and prints a final line with the provided final message.
 func (s *Spinner) Stop(final string) {
+	if s.static {
+		s.mu.Lock()
+		wasActive := s.active
+		s.active = false
+		s.mu.Unlock()
+		if wasActive {
+			io.WriteString(s.out, final+"\n")
+		}
+		return
+	}
 	g := false
 	s.mu.Lock()
 	if s.stop != nil {

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const v04Router = `package transport
+const v04ArchRouter = `package transport
 
 import (
 	"encoding/json"
@@ -26,7 +26,7 @@ func NewRouter() http.Handler {
 }
 `
 
-const v04Main = `package main
+const v04ArchMain = `package main
 
 import (
 	"log/slog"
@@ -47,8 +47,8 @@ func writeV04Project(t *testing.T, routerRel string) string {
 	root := t.TempDir()
 	for rel, content := range map[string]string{
 		"go.mod":             "module example.com/app\n",
-		routerRel:            v04Router,
-		"cmd/server/main.go": v04Main,
+		routerRel:            v04ArchRouter,
+		"cmd/server/main.go": v04ArchMain,
 	} {
 		path := filepath.Join(root, rel)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -126,7 +126,7 @@ func TestIntegrateMainGoLeavesUnmatchedLayoutUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(data) != v04Main {
+	if string(data) != v04ArchMain {
 		t.Fatalf("main.go must stay untouched when no replacement applies, got:\n%s", data)
 	}
 }

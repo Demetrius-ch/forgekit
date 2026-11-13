@@ -85,36 +85,35 @@ const (
 // ProjectConfig is the central v0.6 configuration for a generated project.
 // It is persisted in .forge/forge.yaml and drives generation planning.
 type ProjectConfig struct {
-	Name           string         `yaml:"name" json:"name"`
-	ModulePath     string         `yaml:"module" json:"module"`
-	Language       Language       `yaml:"language" json:"language"`
-	Runtime        Runtime        `yaml:"runtime" json:"runtime"`
-	Architecture   Architecture   `yaml:"architecture" json:"architecture"`
-	Database       Database       `yaml:"database" json:"database"`
-	Docker         bool           `yaml:"docker" json:"docker"`
-	Authentication Authentication `yaml:"authentication" json:"authentication"`
-	Documentation  Documentation  `yaml:"documentation" json:"documentation"`
-	Tests          TestStrategy   `yaml:"tests" json:"tests"`
-	CI             CIStrategy     `yaml:"ci" json:"ci"`
-	TemplateVersion string        `yaml:"templateVersion" json:"templateVersion"`
-
+	Name            string         `yaml:"name" json:"name"`
+	ModulePath      string         `yaml:"module" json:"module"`
+	Language        Language       `yaml:"language" json:"language"`
+	Runtime         Runtime        `yaml:"runtime" json:"runtime"`
+	Architecture    Architecture   `yaml:"architecture" json:"architecture"`
+	Database        Database       `yaml:"database" json:"database"`
+	Docker          bool           `yaml:"docker" json:"docker"`
+	Authentication  Authentication `yaml:"authentication" json:"authentication"`
+	Documentation   Documentation  `yaml:"documentation" json:"documentation"`
+	Tests           TestStrategy   `yaml:"tests" json:"tests"`
+	CI              CIStrategy     `yaml:"ci" json:"ci"`
+	TemplateVersion string         `yaml:"templateVersion" json:"templateVersion"`
 }
 
 // Default returns the v0.6-compatible generation profile. Optional components
 // are disabled until a caller selects them explicitly.
 func Default(name, modulePath string) ProjectConfig {
 	return ProjectConfig{
-		Name:           name,
-		ModulePath:     modulePath,
-		Language:       LanguageGo,
-		Runtime:        RuntimeNone,
-		Architecture:   ArchitectureHexagonal,
-		Database:       DatabasePostgres,
-		Docker:         true,
-		Authentication: AuthenticationNone,
-		Documentation:  DocumentationNone,
-		Tests:          TestStrategyUnit,
-		CI:             CIStrategyNone,
+		Name:            name,
+		ModulePath:      modulePath,
+		Language:        LanguageGo,
+		Runtime:         RuntimeNone,
+		Architecture:    ArchitectureHexagonal,
+		Database:        DatabasePostgres,
+		Docker:          true,
+		Authentication:  AuthenticationNone,
+		Documentation:   DocumentationNone,
+		Tests:           TestStrategyUnit,
+		CI:              CIStrategyNone,
 		TemplateVersion: "",
 	}
 }
@@ -176,6 +175,9 @@ func (c ProjectConfig) Validate() error {
 	}
 	if err := validateLanguageRuntime(c.Language, c.Runtime); err != nil {
 		return err
+	}
+	if c.Documentation == DocumentationSwagger && (c.Language == LanguageTypeScript || c.Language == LanguageJavaScript) {
+		return fmt.Errorf("documentation swagger is not supported yet for %s projects; use docs=none", c.Language)
 	}
 	return nil
 }

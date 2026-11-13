@@ -67,8 +67,9 @@ func findMainPath(projectRoot string) string {
 	return ""
 }
 
-// RouterPath returns the router file of a supported Go layout, or "" if none is found.
-func RouterPath(projectRoot string) string {
+// FindRouterPath returns the router file of a supported architecture layout,
+// or an empty string when the project has none.
+func FindRouterPath(projectRoot string) string {
 	return findRouterPath(projectRoot)
 }
 
@@ -161,7 +162,8 @@ func IntegrateRouterGo(projectRoot string, integration RouterIntegration) error 
 	// 2. Insert the statement. Middlewares go right after a known anchor and
 	// routes right before "return r": chi panics when r.Use follows a route.
 	inserted := false
-	if integration.IsRoute {
+	// Anything that is not an r.Use(...) middleware is a route registration.
+	if integration.IsRoute || !strings.HasPrefix(integration.MiddlewareCall, "r.Use(") {
 		const ret = "\n\treturn r\n"
 		if i := strings.LastIndex(src, ret); i >= 0 {
 			src = src[:i] + "\n\t" + integration.MiddlewareCall + src[i:]
@@ -202,16 +204,22 @@ func RemoveRouterGo(projectRoot string, integration RouterIntegration) error {
 	src := string(content)
 
 	// 1. Remove the statement. Matching on MiddlewareCheck also removes the
-	// forms written by earlier ForgeKit versions.
-	lines := strings.Split(src, "\n")
-	kept := lines[:0]
-	for _, line := range lines {
-		if strings.Contains(line, integration.MiddlewareCheck) {
-			continue
-		}
-		kept = append(kept, line)
+	// forms written by earlier ForgeKit versions; without it, the exact call.
+	marker := integration.MiddlewareCheck
+	if marker == "" {
+		marker = integration.MiddlewareCall
 	}
-	src = strings.Join(kept, "\n")
+	if marker != "" {
+		lines := strings.Split(src, "\n")
+		kept := lines[:0]
+		for _, line := range lines {
+			if strings.Contains(line, marker) {
+				continue
+			}
+			kept = append(kept, line)
+		}
+		src = strings.Join(kept, "\n")
+	}
 
 	// 2. Remove the import if it exists
 	importPath := `"` + integration.ImportPath + `"`

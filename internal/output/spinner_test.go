@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -56,5 +57,28 @@ func TestSpinnerStopsCleanly(t *testing.T) {
 	remaining := out[lastIndex+len("✓ Docker — 100/100"):]
 	if strings.ContainsAny(remaining, "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏") {
 		t.Fatalf("spinner glyphs found after final message: %q", remaining)
+	}
+}
+
+func TestSpinnerNonTerminalPrintsOnlyFinalLine(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSpinner(w)
+	s.delay = 5 * time.Millisecond
+
+	s.Start("Analyse Docker...")
+	time.Sleep(40 * time.Millisecond)
+	s.Stop("✓ Docker — 100/100")
+	s.Stop("must not be printed twice")
+	w.Close()
+
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "✓ Docker — 100/100\n" {
+		t.Fatalf("expected only the final line on a non-terminal, got %q", out)
 	}
 }

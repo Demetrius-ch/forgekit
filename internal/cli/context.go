@@ -3,8 +3,10 @@ package cli
 import (
 	"io"
 	"os"
+	"sync"
 
 	"github.com/Demetrius-ch/forgekit/internal/output"
+	"github.com/Demetrius-ch/forgekit/internal/prompt"
 	"github.com/spf13/cobra"
 )
 
@@ -27,3 +29,18 @@ func bindGlobalFlags(cmd *cobra.Command, g *globalFlags) {
 }
 
 var stderr io.Writer = os.Stderr
+
+var (
+	sharedPrompter     *prompt.Prompter
+	sharedPrompterOnce sync.Once
+)
+
+// stdinPrompter returns the single prompter reading os.Stdin. Each prompter
+// buffers its input, so a new one per question would lose the answers already
+// buffered by the previous one when stdin is a pipe or a file.
+func stdinPrompter() *prompt.Prompter {
+	sharedPrompterOnce.Do(func() {
+		sharedPrompter = prompt.New(os.Stdin, os.Stdout)
+	})
+	return sharedPrompter
+}

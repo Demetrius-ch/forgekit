@@ -9,7 +9,7 @@ help:
 	@echo "  make build          - Build forge binary (development)"
 	@echo "  make test           - Run all tests"
 	@echo "  make vet            - Run go vet"
-	@echo "  make lint           - Run gofmt -w ."
+	@echo "  make lint           - Run gofmt -w on project sources"
 	@echo "  make build-linux    - Build static Linux binary (CGO_ENABLED=0)"
 	@echo "  make package        - Build release artifacts with GoReleaser (snapshot)"
 	@echo "  make release-snapshot - Alias for package"
@@ -30,9 +30,9 @@ test:
 vet:
 	go vet ./...
 
-# Format code
+# Format code (project sources only: vendor/ holds third-party code)
 lint:
-	gofmt -w .
+	gofmt -w cmd internal pkg doc.go
 
 # Build static Linux binary (for testing distribution)
 build-linux:

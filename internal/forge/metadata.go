@@ -20,14 +20,14 @@ const (
 )
 
 type ForgeMetadata struct {
-	Version       string                       `yaml:"version"`
-	TemplateVersion string        `yaml:"templateVersion,omitempty"`
-	Schema        int                          `yaml:"schema"`
-	Project       string                       `yaml:"project,omitempty"`
-	Language      string                       `yaml:"language,omitempty"`
-	Type          string                       `yaml:"type,omitempty"`
-	CreatedAt     time.Time                    `yaml:"created_at,omitempty"`
-	Configuration *projectconfig.ProjectConfig `yaml:"configuration,omitempty"`
+	Version         string                       `yaml:"version"`
+	TemplateVersion string                       `yaml:"templateVersion,omitempty"`
+	Schema          int                          `yaml:"schema"`
+	Project         string                       `yaml:"project,omitempty"`
+	Language        string                       `yaml:"language,omitempty"`
+	Type            string                       `yaml:"type,omitempty"`
+	CreatedAt       time.Time                    `yaml:"created_at,omitempty"`
+	Configuration   *projectconfig.ProjectConfig `yaml:"configuration,omitempty"`
 }
 
 func MetadataPath(projectRoot string) string {

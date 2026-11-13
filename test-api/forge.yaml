@@ -1,0 +1,24 @@
+project:
+  name: "test-api"
+  language: "go"
+  runtime: "none"
+  module: "github.com/test/test-api"
+  database: "none"
+  docker: true
+  authentication: "none"
+  documentation: "none"
+  tests: "unit"
+  ci: "none"
+
+architecture:
+  kind: "hexagonal"
+  rules:
+    - from: domain
+      to: infrastructure
+      allow: false
+    - from: domain
+      to: transport
+      allow: false
+    - from: application
+      to: transport
+      allow: false

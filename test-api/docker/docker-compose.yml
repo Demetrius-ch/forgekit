@@ -1,0 +1,9 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      HTTP_ADDR: "0.0.0.0:8080"
+    ports:
+      - "8081:8080"
