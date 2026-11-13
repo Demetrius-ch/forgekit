@@ -95,10 +95,11 @@ Les couleurs et la sortie formatée fonctionnent dans les deux (PowerShell 7+, W
 Une fois le package accepté dans le dépôt officiel WinGet :
 
 ```powershell
-winget install ForgeKit
+winget install --id Demetrius-ch.ForgeKit
 ```
 
-> Actuellement en préparation. Le manifeste WinGet sera disponible dans `packaging/winget/` du dépôt.
+> Pas encore disponible : le paquet n'a pas encore été accepté dans `microsoft/winget-pkgs`.
+> Le manifeste prêt à soumettre est dans `packaging/winget/` ; voir `docs/packaging/windows-winget.md`.
 
 ---
 

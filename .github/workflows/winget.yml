@@ -1,0 +1,42 @@
+# .github/workflows/winget.yml - Validate the WinGet manifests before they are submitted
+# to microsoft/winget-pkgs (schema, file set, headers, URLs and SHA256).
+
+name: WinGet manifests
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'packaging/winget/**'
+      - '.github/scripts/validate_winget.py'
+      - '.github/workflows/winget.yml'
+  pull_request:
+    paths:
+      - 'packaging/winget/**'
+      - '.github/scripts/validate_winget.py'
+      - '.github/workflows/winget.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install validator dependencies
+        run: pip install pyyaml jsonschema
+
+      - name: Validate every manifest version
+        run: |
+          status=0
+          for dir in packaging/winget/manifests/*/*/*/*/; do
+            echo "== $dir"
+            python .github/scripts/validate_winget.py --check-urls "$dir" || status=1
+          done
+          exit $status

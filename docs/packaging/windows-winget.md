@@ -1,104 +1,89 @@
-# Préparation WinGet pour ForgeKit
+# Publication de ForgeKit sur WinGet
 
-Ce document décrit la structure du manifeste WinGet multi-fichiers et le processus de soumission future.
+Ce document décrit le manifeste WinGet de ForgeKit et la procédure pour le faire
+accepter dans [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs).
 
-## Structure du Manifeste
+## État actuel
 
-Le manifeste est maintenant **multi-fichiers** (schéma WinGet 1.12.0+) dans `packaging/winget/manifests/d/Demetrius-ch/ForgeKit/0.3.6/` :
+ForgeKit n'est **pas encore** dans le dépôt WinGet. Les deux soumissions de la v0.3.6
+ont été fermées sans être fusionnées :
+
+| PR | Problème signalé | Statut |
+|----|------------------|--------|
+| [#433737](https://github.com/microsoft/winget-pkgs/pull/433737) | Manifeste *singleton* (format déprécié) | Fermée par l'auteur |
+| [#433812](https://github.com/microsoft/winget-pkgs/pull/433812) | Singleton encore présent (avec une URL `..._Windows_x86_64.zip` qui renvoie 404), locale de type `locale` au lieu de `defaultLocale`, en-têtes de schéma manquants | Fermée automatiquement : pas de réponse dans les 3 jours suivant la demande de modifications |
+
+Le CLA Microsoft est déjà signé pour le compte `Demetrius-ch` : il ne sera pas redemandé.
+
+Les manifestes de `packaging/winget/` ont été corrigés et sont vérifiés par
+`.github/workflows/winget.yml` à chaque modification.
+
+## Structure attendue
+
+Exactement **trois** fichiers, pas de manifeste singleton :
 
 ```
-packaging/winget/manifests/d/Demetrius-ch/ForgeKit/0.3.6/
-├── Demetrius-ch.ForgeKit.yaml              # Version manifest
-├── Demetrius-ch.ForgeKit.installer.yaml    # Installer manifest
-└── Demetrius-ch.ForgeKit.locale.en-US.yaml # Locale manifest (en-US)
+manifests/d/Demetrius-ch/ForgeKit/0.3.6/
+├── Demetrius-ch.ForgeKit.yaml               # ManifestType: version (DefaultLocale: en-US)
+├── Demetrius-ch.ForgeKit.installer.yaml     # ManifestType: installer
+└── Demetrius-ch.ForgeKit.locale.en-US.yaml  # ManifestType: defaultLocale
 ```
 
-### Artefacts Windows Réels (Release v0.3.6)
+Règles vérifiées par le validateur, et à l'origine des refus passés :
 
-| Architecture | Fichier | URL | SHA256 |
-|-------------|---------|-----|--------|
-| x64 | `forgekit_0.3.6_windows_amd64.zip` | `https://github.com/Demetrius-ch/forgekit/releases/download/v0.3.6/forgekit_0.3.6_windows_amd64.zip` | `e4c74e2e5c23477dee30fa7934809293b0f4c325b59930a16f66ecc79b1cca7e` |
-| arm64 | `forgekit_0.3.6_windows_arm64.zip` | `https://github.com/Demetrius-ch/forgekit/releases/download/v0.3.6/forgekit_0.3.6_windows_arm64.zip` | `ac1bd1e4c30cd3b292b11be7afc47283d1ce8fea36018cae73f466200731f785` |
+- la première ligne de chaque fichier est l'en-tête de schéma, par exemple
+  `# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json` ;
+- le manifeste de version contient seulement `PackageIdentifier`, `PackageVersion`,
+  `DefaultLocale`, `ManifestType`, `ManifestVersion` ;
+- la locale par défaut (`en-US`) est de type `defaultLocale` ;
+- aucun champ inconnu (`Commands` va dans le manifeste installer, pas dans la locale) ;
+- `InstallerSwitches` absent pour un zip portable (des valeurs vides sont refusées) ;
+- les URLs existent, leur SHA256 correspond et l'archive contient `forgekit.exe`.
 
-**Note** : Le nommage GoReleaser utilise `windows_amd64` / `windows_arm64` (minuscules), pas `Windows_x86_64` / `Windows_arm64`.
+La commande installée est `forgekit` (alias portable). Il n'y a pas d'alias `forge` sous Windows.
 
-## Validation Locale
+## Valider avant de soumettre
+
+Sous Linux, macOS ou Windows (Python 3) :
 
 ```bash
-# Installer wingetcreate (nécessite Windows)
-wingetcreate validate packaging/winget/manifests/d/Demetrius-ch/ForgeKit/0.3.6/
-
-# Ou valider un fichier spécifique
-wingetcreate validate packaging/winget/manifests/d/Demetrius-ch/ForgeKit/0.3.6/Demetrius-ch.ForgeKit.yaml
+pip install pyyaml jsonschema
+python .github/scripts/validate_winget.py --check-urls packaging/winget/manifests/d/Demetrius-ch/ForgeKit/0.3.6
 ```
 
-## Processus de Soumission
-
-1. **Préparer la release** : Créer un tag Git `vX.Y.Z` → déclenche GoReleaser
-2. **Récupérer les artefacts** : Télécharger les ZIP Windows depuis GitHub Releases
-3. **Calculer SHA256** :
-   ```bash
-   sha256sum forgekit_X.Y.Z_windows_amd64.zip
-   sha256sum forgekit_X.Y.Z_windows_arm64.zip
-   ```
-4. **Mettre à jour les 3 manifestes** dans `packaging/winget/manifests/d/Demetrius-ch/ForgeKit/X.Y.Z/` :
-   - `Demetrius-ch.ForgeKit.yaml` : version, release date
-   - `Demetrius-ch.ForgeKit.installer.yaml` : URLs, SHA256
-   - `Demetrius-ch.ForgeKit.locale.en-US.yaml` : version (optionnel)
-5. **Valider** : `wingetcreate validate packaging/winget/manifests/d/Demetrius-ch/ForgeKit/X.Y.Z/`
-6. **Forker** : `microsoft/winget-pkgs`
-7. **Créer la structure** dans le fork :
-   ```
-   manifests/d/Demetrius-ch/ForgeKit/X.Y.Z/
-   ├── Demetrius-ch.ForgeKit.yaml
-   ├── Demetrius-ch.ForgeKit.installer.yaml
-   └── Demetrius-ch.ForgeKit.locale.en-US.yaml
-   ```
-8. **Pull Request** : Soumettre vers `microsoft/winget-pkgs:master`
-
-## Exigences WinGet (Schema 1.12.0)
-
-- `PackageIdentifier` : `Demetrius-ch.ForgeKit` (format Publisher.Name)
-- `PackageVersion` : Version exacte du tag
-- `InstallerType` : `zip` (archive portable)
-- `NestedInstallerType` : `portable` (binaire autonome)
-- `NestedInstallerFiles.RelativeFilePath` : `forgekit.exe` (à la racine du ZIP)
-- `PortableCommandAlias` : `forgekit` (commande exposée dans PATH)
-- `Architecture` : `x64` et `arm64` (pas `x86` ni `arm`)
-- `ManifestVersion` : `1.12.0` (dernière stable)
-
-## Notes Importantes
-
-- **Ne pas soumettre avant** que les binaires Windows soient publiés sur GitHub Releases
-- **Checksums obligatoires** : WinGet rejette les manifestes sans SHA256 valides
-- **URLs d'installateur** : Doivent pointer vers `github.com/Demetrius-ch/forgekit/releases/download/v...`
-- **Signature Authenticode** : Recommandée pour éviter SmartScreen, mais pas obligatoire pour la soumission initiale
-- **Publisher** : Doit correspondre à l'identité GitHub (`Demetrius-ch`)
-
-## Commandes Exécutées Après Installation
-
-WinGet ajoute automatiquement le dossier d'installation au PATH utilisateur. Les commandes disponibles :
+Sous Windows, avec le client officiel, en plus :
 
 ```powershell
+winget validate --manifest packaging\winget\manifests\d\Demetrius-ch\ForgeKit\0.3.6
+# Test d'installation local (nécessite: winget settings --enable LocalManifestFiles, en administrateur)
+winget install --manifest packaging\winget\manifests\d\Demetrius-ch\ForgeKit\0.3.6
 forgekit version
-forgekit init mon-api
-forgekit doctor
-forgekit add auth
-forgekit --help
 ```
 
-L'alias `forge` est aussi disponible via le même binaire.
+## Soumettre
 
-## Mises à Jour Futures
+1. Forker `microsoft/winget-pkgs` (ou synchroniser le fork existant avec `master`).
+2. Créer une branche, par exemple `Demetrius-ch.ForgeKit-0.3.6`.
+3. Copier **uniquement** les trois fichiers dans `manifests/d/Demetrius-ch/ForgeKit/0.3.6/`.
+   Vérifier qu'aucun autre fichier (ancien singleton) ne reste dans ce dossier.
+4. Ouvrir la PR vers `microsoft/winget-pkgs:master`, titre : `New package: Demetrius-ch.ForgeKit version 0.3.6`.
+5. Suivre la PR : répondre aux commentaires des bots et des relecteurs **dans les 3 jours**,
+   sinon la PR est fermée automatiquement (cas de #433812). Pousser les corrections sur la même branche.
 
-Pour chaque nouvelle version :
-1. Tag Git → GoReleaser publie les artefacts
-2. Mettre à jour les 3 manifestes : version, URLs, SHA256, ReleaseDate
-3. Soumettre PR vers `microsoft/winget-pkgs:master`
+Alternative outillée (Windows) : `wingetcreate submit --token <PAT> packaging\winget\manifests\d\Demetrius-ch\ForgeKit\0.3.6`
+crée le fork, la branche et la PR automatiquement.
 
-## Ressources
+## Nouvelle version
 
-- [WinGet Manifest Specification](https://github.com/microsoft/winget-pkgs/blob/master/manifest-spec/manifest-schema.md)
-- [wingetcreate Tool](https://github.com/microsoft/wingetcreate)
-- [Submission Process](https://github.com/microsoft/winget-pkgs/blob/master/CONTRIBUTING.md)
-- [ForgeKit Releases](https://github.com/Demetrius-ch/forgekit/releases)
+1. Tag `vX.Y.Z` → GoReleaser publie `forgekit_X.Y.Z_windows_amd64.zip` et `forgekit_X.Y.Z_windows_arm64.zip`.
+2. Copier le dossier `0.3.6` en `X.Y.Z` et mettre à jour `PackageVersion`, `ReleaseDate`,
+   `ReleaseNotesUrl`, les URLs et les SHA256 (`sha256sum forgekit_X.Y.Z_windows_*.zip`).
+3. Lancer le validateur (la CI le fait aussi), puis soumettre comme ci-dessus.
+   Une fois le paquet accepté, `wingetcreate update Demetrius-ch.ForgeKit --version X.Y.Z --urls <x64> <arm64> --submit`
+   automatise ces étapes.
+
+## Références
+
+- [Spécification des manifestes](https://github.com/microsoft/winget-pkgs/blob/master/doc/manifest/README.md)
+- [Guide de contribution winget-pkgs](https://github.com/microsoft/winget-pkgs/blob/master/CONTRIBUTING.md)
+- [wingetcreate](https://github.com/microsoft/winget-create)

@@ -1,5 +1,4 @@
-# WinGet Version Manifest for ForgeKit v0.3.6
-# See: https://github.com/microsoft/winget-pkgs/blob/master/manifest-spec/manifest-schema.md
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
 
 PackageIdentifier: Demetrius-ch.ForgeKit
 PackageVersion: 0.3.6
