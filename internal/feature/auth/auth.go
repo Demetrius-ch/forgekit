@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/Demetrius-ch/forgekit/internal/feature"
@@ -42,23 +41,17 @@ func (AuthFeature) Check(ctx context.Context, project feature.ProjectContext) er
 		return fmt.Errorf("vérifier l'installation existante : %w", err)
 	}
 	if installed {
-		return fmt.Errorf("auth version %s déjà installée", existing.Version)
+		return fmt.Errorf("auth version %s %w", existing.Version, feature.ErrAlreadyInstalled)
 	}
 
-	// Check if project has required structure
-	// router.go location depends on the architecture (hexagonal, clean, layered).
-	if feature.FindRouterPath(project.Root) == "" {
-		return fmt.Errorf("fichier requis manquant : %s", filepath.Join(project.Root, "internal", "transport", "http", "router.go"))
+	if err := feature.CheckGoHTTPProject(project.Root, false); err != nil {
+		return err
 	}
 
-	requiredPaths := []string{
-		filepath.Join(project.Root, "go.mod"),
-	}
-
-	for _, p := range requiredPaths {
-		if _, err := os.Stat(p); err != nil {
-			return fmt.Errorf("fichier requis manquant : %s", p)
-		}
+	// Projects created with `forge init --auth jwt` already ship internal/auth;
+	// overwriting it would break the router that uses it.
+	if entries, err := filepath.Glob(filepath.Join(project.Root, "internal", "auth", "*.go")); err == nil && len(entries) > 0 {
+		return fmt.Errorf("auth : internal/auth existe déjà dans le projet, %w", feature.ErrAlreadyInstalled)
 	}
 
 	return nil
@@ -172,15 +165,7 @@ func (AuthFeature) Remove(ctx context.Context, project feature.ProjectContext, p
 	}
 
 	// Remove dependencies from go.mod
-	for _, dep := range plan.Dependencies {
-		cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
-		cmd.Dir = project.Root
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			// Log but continue - dependency might not be in go.mod
-		}
-	}
+	feature.DropDependencies(project.Root, plan.Dependencies)
 
 	// Run go mod tidy
 	if err := feature.RunGoModTidy(project.Root); err != nil {

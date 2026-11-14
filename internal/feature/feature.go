@@ -1,6 +1,13 @@
 package feature
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrAlreadyInstalled is wrapped by Feature.Check when the feature is already
+// present in the project; installation of that feature is then skipped.
+var ErrAlreadyInstalled = errors.New("déjà installée")
 
 // Feature represents an installable ForgeKit feature.
 type Feature interface {

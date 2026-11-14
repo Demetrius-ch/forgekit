@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/Demetrius-ch/forgekit/internal/feature"
 )
 
 // TestRestoreInstallSnapshotRevertsFeatureFiles checks that a failed install
@@ -26,8 +24,7 @@ func TestRestoreInstallSnapshotRevertsFeatureFiles(t *testing.T) {
 	write(".env.example", "HTTP_PORT=8080\n")
 	write("internal/transport/http/router.go", "package transport\n")
 
-	plan := feature.Plan{Files: []feature.FileAction{{Destination: "internal/cors/cors.go"}}}
-	snapshot, err := createInstallSnapshot(root, snapshotPaths(root, plan)...)
+	snapshot, err := createInstallSnapshot(root)
 	if err != nil {
 		t.Fatal(err)
 	}

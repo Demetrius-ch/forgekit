@@ -100,9 +100,10 @@ func TestForgeInitInteractivePipedAnswersE2E(t *testing.T) {
 		t.Fatalf("build forge: %s: %v", out, err)
 	}
 
-	// module, port, language, architecture, database, docker, auth, docs,
-	// tests, ci (FORGE_AUTHOR set: no author prompt)
-	answers := "github.com/forgekit/piped-api\n\n\n\nmysql\n\n\n\n\n\n"
+	// language (asked first: the module prompt depends on it), module, port,
+	// architecture, database, docker, auth, docs, tests, ci
+	// (FORGE_AUTHOR set: no author prompt)
+	answers := "\ngithub.com/forgekit/piped-api\n\n\nmysql\n\n\n\n\n\n"
 	init := exec.Command(bin, "init", "piped-api", "--dir", target, "--skip-postprocess")
 	init.Env = append(os.Environ(), "FORGE_AUTHOR=Tester")
 	init.Stdin = strings.NewReader(answers)

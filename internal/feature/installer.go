@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -207,17 +206,7 @@ func (i *Installer) applyDependencies(ctx context.Context, deps []Dependency) er
 		return nil
 	}
 
-	for _, dep := range deps {
-		cmd := exec.Command("go", "get", dep.Module+"@"+dep.Version)
-		cmd.Dir = i.projectRoot
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("go get %s@%s : %w", dep.Module, dep.Version, err)
-		}
-	}
-
-	return nil
+	return AddDependencies(i.projectRoot, deps)
 }
 
 func (i *Installer) applyEnvironment(envVars []string) error {

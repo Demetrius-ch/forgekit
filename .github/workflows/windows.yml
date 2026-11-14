@@ -17,7 +17,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version-file: go.mod
           cache: false
 
       - name: Download dependencies
@@ -54,21 +54,21 @@ jobs:
 
       - name: Integration test (scaffolding only, no Docker)
         run: |
-          ./forgekit.exe init test-api --non-interactive --module github.com/forgekit/test-api --skip-postprocess
-          ls test-api
-          test-path test-api/go.mod
-          test-path test-api/cmd/server/main.go
-          test-path test-api/internal/transport/http/router.go
-          test-path test-api/.env.example
-          test-path test-api/forge.yaml
-          test-path test-api/.gitignore
-          test-path test-api/README.md
-          test-path test-api/docker/docker-compose.yml
-          test-path test-api/docker/Dockerfile
+          ./forgekit.exe init ci-windows-api --non-interactive --module github.com/forgekit/ci-windows-api --skip-postprocess
+          ls ci-windows-api
+          test-path ci-windows-api/go.mod
+          test-path ci-windows-api/cmd/server/main.go
+          test-path ci-windows-api/internal/transport/http/router.go
+          test-path ci-windows-api/.env.example
+          test-path ci-windows-api/forge.yaml
+          test-path ci-windows-api/.gitignore
+          test-path ci-windows-api/README.md
+          test-path ci-windows-api/docker/docker-compose.yml
+          test-path ci-windows-api/docker/Dockerfile
 
       - name: Test doctor command
         run: |
-          cd test-api
+          cd ci-windows-api
           ..\forgekit.exe doctor
 
       - name: Upload Windows binaries

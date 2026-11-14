@@ -8,33 +8,38 @@ import (
 	"strings"
 )
 
+// runGo runs a go toolchain command in dir. Its output is only reported when
+// the command fails, so that --quiet and --format json stay clean.
+func runGo(dir string, args ...string) error {
+	cmd := exec.Command("go", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("go %s : %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 // AddDependencies adds Go module dependencies to go.mod.
 func AddDependencies(projectRoot string, deps []Dependency) error {
-	if len(deps) == 0 {
-		return nil
-	}
-
 	for _, dep := range deps {
-		cmd := exec.Command("go", "get", dep.Module+"@"+dep.Version)
-		cmd.Dir = projectRoot
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("go get %s@%s : %w", dep.Module, dep.Version, err)
+		if err := runGo(projectRoot, "get", dep.Module+"@"+dep.Version); err != nil {
+			return err
 		}
 	}
-
 	return nil
+}
+
+// DropDependencies removes the requirements of deps from go.mod. A module that
+// is not required is not an error; go mod tidy settles the rest afterwards.
+func DropDependencies(projectRoot string, deps []Dependency) {
+	for _, dep := range deps {
+		_ = runGo(projectRoot, "mod", "edit", "-droprequire", dep.Module)
+	}
 }
 
 // RunGoModTidy runs go mod tidy in the project directory.
 func RunGoModTidy(projectRoot string) error {
-	cmd := exec.Command("go", "mod", "tidy")
-	cmd.Dir = projectRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return runGo(projectRoot, "mod", "tidy")
 }
 
 // RunGoFmt runs gofmt on all Go files in the project.
@@ -65,9 +70,10 @@ func RunGoFmt(projectRoot string) error {
 
 	cmd := exec.Command("gofmt", append([]string{"-w"}, files...)...)
 	cmd.Dir = projectRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("gofmt : %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // FileExists checks if a file exists.

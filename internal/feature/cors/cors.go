@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/Demetrius-ch/forgekit/internal/feature"
@@ -27,7 +26,7 @@ func (CorsFeature) Version() string {
 
 // DependsOn returns the list of features this feature depends on.
 func (CorsFeature) DependsOn() []string {
-	return []string{"auth"}
+	return []string{}
 }
 
 func (CorsFeature) Check(ctx context.Context, project feature.ProjectContext) error {
@@ -36,23 +35,11 @@ func (CorsFeature) Check(ctx context.Context, project feature.ProjectContext) er
 		return fmt.Errorf("vérifier l'installation existante : %w", err)
 	}
 	if installed {
-		return fmt.Errorf("cors version %s déjà installée", existing.Version)
+		return fmt.Errorf("cors version %s %w", existing.Version, feature.ErrAlreadyInstalled)
 	}
 
-	// router.go location depends on the architecture (hexagonal, clean, layered).
-	if feature.FindRouterPath(project.Root) == "" {
-		return fmt.Errorf("fichier requis manquant : %s", filepath.Join(project.Root, "internal", "transport", "http", "router.go"))
-	}
-
-	requiredPaths := []string{
-		filepath.Join(project.Root, "cmd", "server", "main.go"),
-		filepath.Join(project.Root, "go.mod"),
-	}
-
-	for _, p := range requiredPaths {
-		if _, err := os.Stat(p); err != nil {
-			return fmt.Errorf("fichier requis manquant : %s", p)
-		}
+	if err := feature.CheckGoHTTPProject(project.Root, true); err != nil {
+		return err
 	}
 
 	return nil
@@ -196,15 +183,7 @@ func (CorsFeature) Remove(ctx context.Context, project feature.ProjectContext, p
 	}
 
 	// Remove dependencies from go.mod
-	for _, dep := range plan.Dependencies {
-		cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
-		cmd.Dir = project.Root
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			// Log but continue - dependency might not be in go.mod
-		}
-	}
+	feature.DropDependencies(project.Root, plan.Dependencies)
 
 	// Run go mod tidy
 	if err := feature.RunGoModTidy(project.Root); err != nil {

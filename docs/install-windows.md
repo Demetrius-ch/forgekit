@@ -6,8 +6,8 @@
 
 Rendez-vous sur la page [GitHub Releases](https://github.com/Demetrius-ch/forgekit/releases) et téléchargez l'archive correspondant à votre architecture :
 
-- **Windows x86_64 (64-bit)** : `forgekit_<version>_Windows_x86_64.zip`
-- **Windows ARM64** : `forgekit_<version>_Windows_arm64.zip`
+- **Windows x86_64 (64-bit)** : `forgekit_<version>_windows_amd64.zip`
+- **Windows ARM64** : `forgekit_<version>_windows_arm64.zip`
 
 ### 2. Extraire l'archive
 
@@ -95,10 +95,11 @@ Les couleurs et la sortie formatée fonctionnent dans les deux (PowerShell 7+, W
 Une fois le package accepté dans le dépôt officiel WinGet :
 
 ```powershell
-winget install ForgeKit
+winget install --id Demetrius-ch.ForgeKit
 ```
 
-> Actuellement en préparation. Le manifeste WinGet sera disponible dans `packaging/winget/` du dépôt.
+> Pas encore disponible : le paquet n'a pas encore été accepté dans `microsoft/winget-pkgs`.
+> Le manifeste prêt à soumettre est dans `packaging/winget/` ; voir `docs/packaging/windows-winget.md`.
 
 ---
 

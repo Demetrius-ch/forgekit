@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 
+	"github.com/Demetrius-ch/forgekit/internal/projectconfig"
 	"github.com/Demetrius-ch/forgekit/internal/report"
 )
 
@@ -12,6 +13,10 @@ type Context struct {
 	Language    string
 	GoVersion   string
 	Extra       map[string]any
+	// Project is the configuration chosen at generation time (.forge/forge.yaml),
+	// nil for projects that do not record it. Rules use it to skip checks for
+	// components the project deliberately does not use (Docker, PostgreSQL...).
+	Project *projectconfig.ProjectConfig
 }
 
 // Rule is a pluggable diagnostic rule.

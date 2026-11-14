@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Demetrius-ch/forgekit/internal/app"
@@ -51,10 +52,12 @@ func NewRootCommand() *cobra.Command {
 
 	bindGlobalFlags(root, g)
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		if g.Format != output.FormatHuman && g.Format != output.FormatJSON {
+		switch g.Format {
+		case output.FormatHuman, output.FormatJSON:
+			return nil
+		default:
 			return fmt.Errorf("format de sortie invalide %q : valeurs acceptées human, json", g.Format)
 		}
-		return nil
 	}
 	root.AddCommand(newInitCommand(g))
 	root.AddCommand(newVersionCommand(g))
@@ -121,6 +124,15 @@ func defaultModulePath(projectName string) string {
 	return fmt.Sprintf("github.com/%s/%s", user, projectName)
 }
 
+// defaultModulePathFor returns the default module path (Go) or package name
+// (npm, Python) of a new project.
+func defaultModulePathFor(language projectconfig.Language, projectName string) string {
+	if language == "" || language == projectconfig.LanguageGo {
+		return defaultModulePath(projectName)
+	}
+	return projectName
+}
+
 func defaultDatabaseName(projectName string) string {
 	return strings.ReplaceAll(projectName, "-", "_")
 }
@@ -164,6 +176,15 @@ func printInitSummaryOpts(projectName, modulePath, targetDir string, httpPort in
   forge doctor
   forge check
   forge analyze`, filepath.Base(targetDir), dockerStep)
+	} else if cfg.IsPython() {
+		nextSteps = fmt.Sprintf(`
+  cd %s
+  cp .env.example .env
+  %s -m pytest
+  %s main.py
+
+  forge doctor
+  forge analyze`, filepath.Base(targetDir), venvPythonHint(), venvPythonHint())
 	} else if cfg.IsNode() {
 		nextSteps = fmt.Sprintf(`
   cd %s
@@ -176,29 +197,13 @@ func printInitSummaryOpts(projectName, modulePath, targetDir string, httpPort in
   forge doctor
   forge check
   forge analyze`, filepath.Base(targetDir))
-	} else if cfg.IsPython() {
-		nextSteps = fmt.Sprintf(`
-  cd %s
-  cp .env.example .env
-  source .venv/bin/activate
-  python -m pytest
-  python main.py
-
-  forge doctor
-  forge check
-  forge analyze`, filepath.Base(targetDir))
-	}
-
-	moduleLabel := "Module Go :    "
-	if !cfg.IsGo() {
-		moduleLabel = "Package :      "
 	}
 
 	fmt.Fprintf(os.Stdout, `
 ✓ Projet %q créé avec succès
 
   Répertoire :    %s
-  %s %s
+  %-15s %s
   Port HTTP :     %d
   Langage :       %s
   Architecture :  %s
@@ -213,7 +218,27 @@ Prochaines étapes recommandées :
 %s
 
 Votre projet est prêt pour une première exécution locale et pour les vérifications de qualité.
-`, projectName, targetDir, moduleLabel, modulePath, httpPort, langLabel, archLabel, dbLine, dockerLabel, authLabel, docsLabel, testsLabel, ciLabel, nextSteps)
+`, projectName, targetDir, moduleLabel(cfg.Language)+" :", modulePath, httpPort, langLabel, archLabel, dbLine, dockerLabel, authLabel, docsLabel, testsLabel, ciLabel, nextSteps)
+}
+
+// moduleLabel names the project identifier of the given language.
+func moduleLabel(language projectconfig.Language) string {
+	switch language {
+	case projectconfig.LanguageTypeScript, projectconfig.LanguageJavaScript:
+		return "Package npm"
+	case projectconfig.LanguagePython:
+		return "Package Python"
+	default:
+		return "Module Go"
+	}
+}
+
+// venvPythonHint is the interpreter of the generated Python virtual environment.
+func venvPythonHint() string {
+	if runtime.GOOS == "windows" {
+		return `.venv\Scripts\python`
+	}
+	return ".venv/bin/python"
 }
 
 func databaseDisplayName(db projectconfig.Database) string {

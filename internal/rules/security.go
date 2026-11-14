@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Demetrius-ch/forgekit/internal/feature"
+	"github.com/Demetrius-ch/forgekit/internal/projectconfig"
 	"github.com/Demetrius-ch/forgekit/internal/report"
 )
 
@@ -17,8 +18,9 @@ import (
 var secretPatterns = []*regexp.Regexp{
 	// AWS Access Key ID
 	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
-	// AWS Secret Access Key
-	regexp.MustCompile(`[A-Za-z0-9/+=]{40}`),
+	// AWS Secret Access Key, only when assigned to an AWS-named variable: a bare
+	// 40-character run also matches import paths and URLs.
+	regexp.MustCompile(`(?i)aws[a-z_]*\s*[:=]\s*["']?[A-Za-z0-9/+=]{40}["']?`),
 	// Private keys
 	regexp.MustCompile(`-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----`),
 	// Generic high-entropy strings that look like secrets (min 20 chars, high entropy)
@@ -43,6 +45,8 @@ var falsePositivePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)example`),                                  // Example code
 	regexp.MustCompile(`(?i)placeholder`),                              // Placeholders
 	regexp.MustCompile(`(?i)dummy`),                                    // Dummy values
+	// Well-known local development credentials, as written by forge init
+	regexp.MustCompile(`(?i)://(postgres:postgres|root:root|mysql:mysql)@`),
 }
 
 // SecuritySecretsRule detects potential hardcoded secrets with reduced false positives.
@@ -87,29 +91,33 @@ func (r SecuritySecretsRule) Run(_ context.Context, rctx Context) ([]report.Find
 		if err != nil {
 			return nil
 		}
-		content := string(data)
-		// Skip if content contains obvious placeholder patterns
-		if isFalsePositive(content) {
+		if strings.HasSuffix(base, "_test.go") {
 			return nil
 		}
+		content := string(data)
+		rel, _ := filepath.Rel(rctx.ProjectRoot, path)
+		// Report the first match per file whose line is not an obvious placeholder.
 		for _, re := range secretPatterns {
-			if loc := re.FindStringIndex(content); loc != nil {
-				rel, _ := filepath.Rel(rctx.ProjectRoot, path)
-				// Extract context around the match for better reporting
-				start := max(0, loc[0]-50)
-				end := min(len(content), loc[1]+50)
-				context := strings.TrimSpace(content[start:end])
-				context = strings.ReplaceAll(context, "\n", " ")
+			for _, loc := range re.FindAllStringIndex(content, -1) {
+				lineStart := strings.LastIndex(content[:loc[0]], "\n") + 1
+				lineEnd := len(content)
+				if i := strings.Index(content[loc[1]:], "\n"); i >= 0 {
+					lineEnd = loc[1] + i
+				}
+				line := strings.TrimSpace(content[lineStart:lineEnd])
+				if isFalsePositive(line) {
+					continue
+				}
 				findings = append(findings, report.Finding{
 					ID:          "security.secrets",
 					Category:    "security",
 					Severity:    report.SeverityWarning,
 					File:        rel,
 					Message:     "Secret potentiel détecté dans le code",
-					Explanation: fmt.Sprintf("Pattern suspect trouvé: ...%s... (ForgeKit n'est pas un scanner SAST complet)", context),
+					Explanation: fmt.Sprintf("Motif suspect ligne %d, valeur masquée (ForgeKit n'est pas un scanner SAST complet)", strings.Count(content[:lineStart], "\n")+1),
 					Suggestion:  "Utilisez des variables d'environnement ou un gestionnaire de secrets (Vault, AWS Secrets Manager, etc.)",
 				})
-				break // Only report first match per file
+				return nil
 			}
 		}
 		return nil
@@ -140,8 +148,8 @@ func (SecuritySensitiveFilesRule) Run(_ context.Context, rctx Context) ([]report
 			}}, nil
 		}
 		return []report.Finding{{
-			ID: "security.files", Category: "security", Severity: report.SeverityWarning,
-			File: ".env", Message: ".env présent localement",
+			ID: "security.files", Category: "security", Severity: report.SeverityInfo,
+			File: ".env", Message: ".env présent localement et ignoré par .gitignore",
 			Explanation: "Normal en dev ; assurez-vous qu'il n'est pas commité",
 		}}, nil
 	}
@@ -463,6 +471,10 @@ func (PostgreSQLRule) Severity() report.Severity {
 }
 
 func (r PostgreSQLRule) Run(_ context.Context, rctx Context) ([]report.Finding, error) {
+	if rctx.Project != nil && rctx.Project.Database != projectconfig.DatabasePostgres {
+		return nil, nil
+	}
+
 	var findings []report.Finding
 
 	// Check if docker-compose.yml has PostgreSQL service

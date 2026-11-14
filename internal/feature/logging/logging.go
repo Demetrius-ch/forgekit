@@ -26,7 +26,7 @@ func (LoggingFeature) Version() string {
 
 // DependsOn returns the list of features this feature depends on.
 func (LoggingFeature) DependsOn() []string {
-	return []string{"auth"}
+	return []string{}
 }
 
 func (LoggingFeature) Check(ctx context.Context, project feature.ProjectContext) error {
@@ -35,23 +35,11 @@ func (LoggingFeature) Check(ctx context.Context, project feature.ProjectContext)
 		return fmt.Errorf("vérifier l'installation existante : %w", err)
 	}
 	if installed {
-		return fmt.Errorf("logging version %s déjà installée", existing.Version)
+		return fmt.Errorf("logging version %s %w", existing.Version, feature.ErrAlreadyInstalled)
 	}
 
-	// router.go location depends on the architecture (hexagonal, clean, layered).
-	if feature.FindRouterPath(project.Root) == "" {
-		return fmt.Errorf("fichier requis manquant : %s", filepath.Join(project.Root, "internal", "transport", "http", "router.go"))
-	}
-
-	requiredPaths := []string{
-		filepath.Join(project.Root, "cmd", "server", "main.go"),
-		filepath.Join(project.Root, "go.mod"),
-	}
-
-	for _, p := range requiredPaths {
-		if _, err := os.Stat(p); err != nil {
-			return fmt.Errorf("fichier requis manquant : %s", p)
-		}
+	if err := feature.CheckGoHTTPProject(project.Root, true); err != nil {
+		return err
 	}
 
 	return nil

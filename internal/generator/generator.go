@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/Demetrius-ch/forgekit/internal/engine"
@@ -52,9 +53,6 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	if projectConfig.IsZero() {
 		projectConfig = projectconfig.Default(opts.ProjectName, opts.ModulePath)
 	}
-	if err := ValidateModulePathFor(opts.ModulePath, projectConfig.Language); err != nil {
-		return nil, err
-	}
 	if projectConfig.Name != opts.ProjectName {
 		return nil, fmt.Errorf("project configuration name %q does not match init project name %q", projectConfig.Name, opts.ProjectName)
 	}
@@ -63,6 +61,9 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	}
 	if err := projectConfig.Validate(); err != nil {
 		return nil, fmt.Errorf("validate project configuration: %w", err)
+	}
+	if err := ValidateModulePathFor(projectConfig.Language, opts.ModulePath); err != nil {
+		return nil, err
 	}
 
 	data := template.Data{
@@ -83,6 +84,12 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 		ExternalDBName:     opts.ExternalDBName,
 		ProjectConfig:      projectConfig,
 	}
+
+	// A target directory that already existed (empty, see ValidateTargetDir) is
+	// emptied on failure rather than deleted: it may be the current directory.
+	_, statErr := os.Stat(opts.TargetDir)
+	targetExisted := statErr == nil
+	cleanup := func() { removeGenerated(opts.TargetDir, targetExisted) }
 
 	if !opts.DryRun {
 		if err := os.MkdirAll(opts.TargetDir, 0o755); err != nil {
@@ -110,7 +117,7 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	}, executionFiles)
 	if err != nil {
 		if !opts.DryRun {
-			_ = os.RemoveAll(opts.TargetDir)
+			cleanup()
 		}
 		return plan, err
 	}
@@ -121,24 +128,24 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 
 	meta := forge.CreateInitialMetadataWithConfig(opts.TargetDir, data.GoVersion, projectConfig)
 	if err := forge.SaveMetadata(opts.TargetDir, meta); err != nil {
-		_ = os.RemoveAll(opts.TargetDir)
+		cleanup()
 		return plan, fmt.Errorf("create forge metadata: %w", err)
 	}
 
 	// Initialize project based on language
 	if projectConfig.IsGo() {
 		if err := g.initGoMod(opts.TargetDir, opts.ModulePath, data.GoVersion, generationPlan.Dependencies); err != nil {
-			_ = os.RemoveAll(opts.TargetDir)
+			cleanup()
 			return plan, err
 		}
 	} else if projectConfig.IsNode() && !opts.SkipNpmInstall {
 		if err := g.initNpmProject(opts.TargetDir); err != nil {
-			_ = os.RemoveAll(opts.TargetDir)
+			cleanup()
 			return plan, err
 		}
 	} else if projectConfig.IsPython() && !opts.SkipNpmInstall {
 		if err := g.initPythonProject(opts.TargetDir); err != nil {
-			_ = os.RemoveAll(opts.TargetDir)
+			cleanup()
 			return plan, err
 		}
 	}
@@ -150,6 +157,22 @@ func (g *Generator) Init(opts InitOptions) ([]engine.PlanEntry, error) {
 	}
 
 	return plan, nil
+}
+
+// removeGenerated deletes what Init created in dir: the whole directory, or
+// only its content when the directory existed beforehand.
+func removeGenerated(dir string, keepDir bool) {
+	if !keepDir {
+		_ = os.RemoveAll(dir)
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		_ = os.RemoveAll(filepath.Join(dir, entry.Name()))
+	}
 }
 
 func (g *Generator) initGoMod(dir, modulePath, goVersion string, dependencies []generationplan.Dependency) error {
@@ -202,8 +225,13 @@ func (g *Generator) initNpmProject(dir string) error {
 }
 
 func (g *Generator) initPythonProject(dir string) error {
+	python, err := pythonCommand()
+	if err != nil {
+		return err
+	}
+
 	// Create virtual environment
-	cmd := exec.Command("python3", "-m", "venv", ".venv")
+	cmd := exec.Command(python, "-m", "venv", ".venv")
 	cmd.Dir = dir
 
 	out, err := cmd.CombinedOutput()
@@ -211,8 +239,9 @@ func (g *Generator) initPythonProject(dir string) error {
 		return fmt.Errorf("create venv: %s: %w", trimOutput(string(out)), err)
 	}
 
-	// Install dependencies
-	cmd = exec.Command(".venv/bin/pip", "install", "-r", "requirements.txt")
+	// Install runtime and test dependencies with the venv's own interpreter,
+	// whose location differs between Windows and Unix.
+	cmd = exec.Command(venvPython(dir, runtime.GOOS), "-m", "pip", "install", "-r", "requirements-dev.txt")
 	cmd.Dir = dir
 
 	out, err = cmd.CombinedOutput()
@@ -221,6 +250,25 @@ func (g *Generator) initPythonProject(dir string) error {
 	}
 
 	return nil
+}
+
+// pythonCommand returns the Python 3 interpreter found on PATH: python3 on
+// Unix, python on Windows installations that do not provide python3.
+func pythonCommand() (string, error) {
+	for _, name := range []string{"python3", "python"} {
+		if path, err := exec.LookPath(name); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("Python 3 introuvable : installez Python 3 et vérifiez que python3 (ou python sous Windows) est dans le PATH")
+}
+
+// venvPython returns the interpreter of the .venv virtual environment in dir.
+func venvPython(dir, goos string) string {
+	if goos == "windows" {
+		return filepath.Join(dir, ".venv", "Scripts", "python.exe")
+	}
+	return filepath.Join(dir, ".venv", "bin", "python")
 }
 
 // PostProcessProject formats Go sources and runs the test suite for the generated project.
@@ -295,9 +343,13 @@ func (g *Generator) PostProcessProject(dir string) error {
 			return fmt.Errorf("parcourir le projet : %w", err)
 		}
 
+		python, err := pythonCommand()
+		if err != nil {
+			return err
+		}
 		// Syntax check using python -m py_compile
 		for _, file := range files {
-			cmd := exec.Command("python3", "-m", "py_compile", file)
+			cmd := exec.Command(python, "-m", "py_compile", file)
 			cmd.Dir = dir
 			if out, err := cmd.CombinedOutput(); err != nil {
 				return fmt.Errorf("python syntax check %s : %s: %w", file, trimOutput(string(out)), err)
@@ -347,20 +399,37 @@ func ValidateModulePath(module string) error {
 	return nil
 }
 
-// ValidateModulePathFor validates the module path for the project language:
-// a Go module path for Go projects, a package name for the other languages.
-func ValidateModulePathFor(module string, language projectconfig.Language) error {
-	if language == "" || language == projectconfig.LanguageGo {
+var (
+	npmPackageName    = regexp.MustCompile(`^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$`)
+	pythonPackageName = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$`)
+)
+
+// ValidateModulePathFor validates the project identifier of the given language:
+// a Go module path, an npm package name, or a Python (PEP 508) package name.
+// For npm and Python, a Go-style module path is still accepted: it was the only
+// form allowed before and generated npm/Python files do not use it.
+func ValidateModulePathFor(language projectconfig.Language, module string) error {
+	module = strings.TrimSpace(module)
+	switch language {
+	case projectconfig.LanguageTypeScript, projectconfig.LanguageJavaScript:
+		if ValidateModulePath(module) == nil {
+			return nil
+		}
+		if len(module) > 214 || !npmPackageName.MatchString(module) {
+			return fmt.Errorf("nom de package npm invalide %q : minuscules, chiffres, '-', '.', '_' ou '~', éventuellement préfixé par @scope/", module)
+		}
+		return nil
+	case projectconfig.LanguagePython:
+		if ValidateModulePath(module) == nil {
+			return nil
+		}
+		if !pythonPackageName.MatchString(module) {
+			return fmt.Errorf("nom de package Python invalide %q : lettres, chiffres, '-', '.' ou '_', commençant et finissant par une lettre ou un chiffre", module)
+		}
+		return nil
+	default:
 		return ValidateModulePath(module)
 	}
-	module = strings.TrimSpace(module)
-	if module == "" {
-		return fmt.Errorf("le nom du package ne peut pas être vide")
-	}
-	if strings.ContainsAny(module, " \t") {
-		return fmt.Errorf("le nom du package ne peut pas contenir d'espaces")
-	}
-	return nil
 }
 
 func ValidateHTTPPort(port int) error {

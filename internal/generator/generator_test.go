@@ -48,6 +48,34 @@ func TestValidateModulePath(t *testing.T) {
 	}
 }
 
+func TestValidateModulePathFor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		language projectconfig.Language
+		module   string
+		wantErr  bool
+	}{
+		{projectconfig.LanguageGo, "github.com/user/my-api", false},
+		{projectconfig.LanguageGo, "my-api", true},
+		{projectconfig.LanguageTypeScript, "my-api", false},
+		{projectconfig.LanguageTypeScript, "@acme/my-api", false},
+		{projectconfig.LanguageJavaScript, "My API", true},
+		{projectconfig.LanguageJavaScript, "github.com/user/my-api", false}, // legacy form kept for compatibility
+		{projectconfig.LanguagePython, "my_api", false},
+		{projectconfig.LanguagePython, "my-api.core", false},
+		{projectconfig.LanguagePython, "-my-api", true},
+		{projectconfig.LanguagePython, "github.com/user/my-api", false}, // legacy form kept for compatibility
+	}
+
+	for _, tt := range tests {
+		err := generator.ValidateModulePathFor(tt.language, tt.module)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("ValidateModulePathFor(%s, %q) error = %v, wantErr %v", tt.language, tt.module, err, tt.wantErr)
+		}
+	}
+}
+
 func TestValidateTargetDir(t *testing.T) {
 	t.Parallel()
 

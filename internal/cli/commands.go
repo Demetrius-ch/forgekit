@@ -2,10 +2,10 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -76,13 +76,17 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 			// Same precedence as the final configuration below: an explicit
 			// --database flag wins over the --config file.
 			selectedDatabase := projectconfig.Database(database)
-			if configFile != "" && !cmd.Flags().Changed("database") {
+			selectedLanguage := projectconfig.Language(language)
+			if configFile != "" {
 				fileConfiguration, loadErr := projectconfig.LoadFile(configFile)
 				if loadErr != nil {
 					return loadErr
 				}
-				if fileConfiguration.Database != "" {
+				if fileConfiguration.Database != "" && !cmd.Flags().Changed("database") {
 					selectedDatabase = fileConfiguration.Database
+				}
+				if fileConfiguration.Language != "" && !cmd.Flags().Changed("language") {
+					selectedLanguage = fileConfiguration.Language
 				}
 			}
 
@@ -104,7 +108,10 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 			}
 
 			dbSelection := DatabaseSelection{DatabaseName: dbName}
-			if selectedDatabase == projectconfig.DatabasePostgres {
+			// Looking for existing databases connects to the local PostgreSQL server
+			// with its default credentials; it only serves the interactive choice of
+			// an existing database, so scripted runs never attempt it.
+			if selectedDatabase == projectconfig.DatabasePostgres && !nonInteractive {
 				// Pass the originally requested postgres port to know if it was auto-selected.
 				dbSelection, err = selectDatabase(g, projectName, dbName, portSelection.DBHostPort, requestedDBPort, nonInteractive, dryRun)
 				if err != nil {
@@ -129,21 +136,35 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 				ExternalDBName:     dbSelection.ExternalDBName,
 			}
 
+			// The language is asked first in interactive mode: the module (Go) or
+			// package name (npm, Python) prompt and its validation depend on it.
+			languageAsked := false
 			if nonInteractive || dryRun {
 				opts.ModulePath = modulePath
 				if opts.ModulePath == "" {
-					opts.ModulePath = defaultModulePath(projectName)
+					opts.ModulePath = defaultModulePathFor(selectedLanguage, projectName)
 				}
 			} else {
 				p := stdinPrompter()
 				fmt.Fprintf(os.Stdout, "\nConfiguration du projet %q\n\n", projectName)
+				if configFile == "" {
+					if language, err = p.AskString("Langage (go, typescript, javascript, python)", language); err != nil {
+						return err
+					}
+					selectedLanguage = projectconfig.Language(language)
+					languageAsked = true
+				}
 				moduleLabel := "Chemin du module Go"
-				if projectconfig.Language(language) == projectconfig.LanguagePython {
+				if selectedLanguage == projectconfig.LanguagePython {
 					moduleLabel = "Nom du package Python"
-				} else if projectconfig.Language(language) == projectconfig.LanguageTypeScript || projectconfig.Language(language) == projectconfig.LanguageJavaScript {
+				} else if selectedLanguage == projectconfig.LanguageTypeScript || selectedLanguage == projectconfig.LanguageJavaScript {
 					moduleLabel = "Nom du package npm"
 				}
-				module, err := p.AskString(moduleLabel, defaultModulePath(projectName))
+				defaultModule := modulePath
+				if defaultModule == "" {
+					defaultModule = defaultModulePathFor(selectedLanguage, projectName)
+				}
+				module, err := p.AskString(moduleLabel, defaultModule)
 				if err != nil {
 					return err
 				}
@@ -184,7 +205,7 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 					return err
 				}
 			}
-			if cmd.Flags().Changed("language") {
+			if cmd.Flags().Changed("language") || languageAsked {
 				projectConfiguration.Language = projectconfig.Language(language)
 				if projectConfiguration.Language == projectconfig.LanguageTypeScript || projectConfiguration.Language == projectconfig.LanguageJavaScript {
 					projectConfiguration.Runtime = projectconfig.RuntimeNode
@@ -215,15 +236,6 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 			}
 			if !nonInteractive && !dryRun && configFile == "" {
 				p := stdinPrompter()
-				if language, err = p.AskString("Langage (go, typescript, javascript, python)", string(projectConfiguration.Language)); err != nil {
-					return err
-				}
-				projectConfiguration.Language = projectconfig.Language(language)
-				if projectConfiguration.Language == projectconfig.LanguageTypeScript || projectConfiguration.Language == projectconfig.LanguageJavaScript {
-					projectConfiguration.Runtime = projectconfig.RuntimeNode
-				} else {
-					projectConfiguration.Runtime = projectconfig.RuntimeNone
-				}
 				if architecture, err = p.AskString("Architecture (hexagonal, clean, layered)", string(projectConfiguration.Architecture)); err != nil {
 					return err
 				}
@@ -275,7 +287,7 @@ func newInitCommand(g *globalFlags) *cobra.Command {
 					opts.ExternalDBHost, opts.ExternalDBPort, opts.ExternalDBUser, opts.ExternalDBPassword, opts.ExternalDBName = "", 0, "", "", ""
 				}
 			}
-			if err := generator.ValidateModulePathFor(opts.ModulePath, projectConfiguration.Language); err != nil {
+			if err := generator.ValidateModulePathFor(projectConfiguration.Language, opts.ModulePath); err != nil {
 				return err
 			}
 			opts.ProjectConfig = projectConfiguration
@@ -674,7 +686,7 @@ func selectDatabase(
 					CreateNew:    true,
 				}, nil
 			case 2:
-				return selectExistingDatabase(g, inspector, databases, ctx, nonInteractive)
+				return selectExistingDatabase(g, inspector, databases, ctx, nonInteractive, projectName)
 			case 3:
 				return DatabaseSelection{}, fmt.Errorf("opération annulée par l'utilisateur")
 			default:
@@ -718,7 +730,7 @@ func selectDatabase(
 	case 1:
 		return askExternalDatabase(g, requestedDBName, requestedDBName)
 	case 2:
-		return selectExistingDatabase(g, inspector, databases, ctx, nonInteractive)
+		return selectExistingDatabase(g, inspector, databases, ctx, nonInteractive, projectName)
 	case 3:
 		return DatabaseSelection{}, fmt.Errorf("opération annulée par l'utilisateur")
 	default:
@@ -733,6 +745,7 @@ func selectExistingDatabase(
 	databases []dbinspect.DatabaseInfo,
 	ctx context.Context,
 	nonInteractive bool,
+	projectName string,
 ) (DatabaseSelection, error) {
 	if len(databases) == 0 {
 		return DatabaseSelection{}, fmt.Errorf("aucune base existante disponible")
@@ -829,7 +842,7 @@ func selectExistingDatabase(
 		fmt.Fprintln(os.Stdout)
 		fmt.Fprintf(os.Stdout, "⚠ Cette base contient déjà des données.\n\n")
 		fmt.Fprintf(os.Stdout, "Base : %s\n", selectedDB.Name)
-		fmt.Fprintf(os.Stdout, "Projet : %s\n\n", "forge-project") // TODO: pass project name
+		fmt.Fprintf(os.Stdout, "Projet : %s\n\n", projectName)
 		if len(state.Pending) > 0 {
 			fmt.Fprintln(os.Stdout, "Les migrations compatibles suivantes seront appliquées :")
 			for _, mig := range state.Pending {
@@ -1137,9 +1150,7 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 	}
 
 	// Detect project language
-	detector := feature.Detector{}
-	projectCtx, _ := detector.DetectLoose(root)
-	language := string(projectCtx.Language)
+	rctx := ruleContext(root)
 
 	categories := []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"}
 	var allFindings []report.Finding
@@ -1160,19 +1171,19 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 		switch cat {
 		case "Architecture":
 			reg := rules.NewRegistry(rules.ArchitectureRule{Rules: loader.ArchitectureRules()})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+			findings, err = reg.Run(context.Background(), rctx)
 		case "Security":
 			reg := rules.NewRegistry(rules.SecuritySecretsRule{}, rules.SecurityCORSRule{})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+			findings, err = reg.Run(context.Background(), rctx)
 		case "Configuration":
 			reg := rules.NewRegistry(rules.GoModRule{}, rules.EnvFileRule{}, rules.PackageJSONRule{})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+			findings, err = reg.Run(context.Background(), rctx)
 		case "Docker":
 			reg := rules.NewRegistry(rules.DockerRule{})
-			findings, err = reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+			findings, err = reg.Run(context.Background(), rctx)
 		case "Tests":
 			// lightweight test detection: presence of _test.go or .test.ts/.test.js files
-			findings, err = detectTests(root, language)
+			findings, err = detectTests(root, rctx.Language)
 		case "Documentation":
 			findings, err = detectDocs(root)
 		default:
@@ -1265,6 +1276,17 @@ func runAnalyze(g *globalFlags, root string, loader rules.StaticConfigLoader, ex
 	return nil
 }
 
+// ruleContext describes the project to the diagnostic rules: its language and,
+// for ForgeKit projects, the configuration chosen at generation time.
+func ruleContext(root string) rules.Context {
+	project, _ := feature.Detector{}.DetectLoose(root)
+	rctx := rules.Context{ProjectRoot: root, Language: string(project.Language)}
+	if meta, err := forge.LoadMetadata(root); err == nil && meta.Configuration != nil {
+		rctx.Project = meta.Configuration
+	}
+	return rctx
+}
+
 // CiError wraps an error with an exit code for CI mode.
 type CiError struct {
 	Code int
@@ -1285,17 +1307,7 @@ func printCiSummary(out io.Writer, res report.Result) {
 	fmt.Fprintf(out, "Summary: pass=%d info=%d warning=%d error=%d critical=%d\n",
 		res.Summary.Pass, res.Summary.Info, res.Summary.Warning, res.Summary.Error, res.Summary.Critical)
 
-	// Print category scores
-	score := report.ComputeScore(res)
-	categories := []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"}
-	for _, cat := range categories {
-		s := score.Categories[cat]
-		status := "PASS"
-		if s < 60 {
-			status = "FAIL"
-		}
-		fmt.Fprintf(out, "  [%s] %s: %d/100\n", status, cat, s)
-	}
+	printCategoryScores(out, res)
 
 	// Print warnings and errors
 	for _, f := range res.Findings {
@@ -1309,33 +1321,24 @@ func printCiSummary(out io.Writer, res report.Result) {
 	}
 }
 
-// detectTests returns findings about tests presence.
+// detectTests returns findings about tests presence. Dependency and VCS
+// directories are skipped: they ship their own tests, which say nothing about
+// the project.
 func detectTests(root string, language string) ([]report.Finding, error) {
 	hasTests := false
 	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
 			return nil
 		}
-		name := d.Name()
-		// Go tests
-		if strings.HasSuffix(name, "_test.go") {
-			hasTests = true
-			return filepath.SkipDir
+		if d.IsDir() {
+			if p != root && snapshotSkipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
 		}
-		// TypeScript/JavaScript tests
-		if strings.HasSuffix(name, ".test.ts") || strings.HasSuffix(name, ".test.js") ||
-			strings.HasSuffix(name, ".spec.ts") || strings.HasSuffix(name, ".spec.js") {
+		if isTestFile(d.Name()) {
 			hasTests = true
-			return filepath.SkipDir
-		}
-		// Python tests
-		if strings.HasPrefix(name, "test_") && strings.HasSuffix(name, ".py") {
-			hasTests = true
-			return filepath.SkipDir
-		}
-		if strings.HasSuffix(name, "_test.py") {
-			hasTests = true
-			return filepath.SkipDir
+			return filepath.SkipAll
 		}
 		return nil
 	})
@@ -1343,6 +1346,21 @@ func detectTests(root string, language string) ([]report.Finding, error) {
 		return []report.Finding{{ID: "tests.present", Category: "tests", Severity: report.SeverityInfo, Message: "Tests détectés"}}, nil
 	}
 	return []report.Finding{{ID: "tests.missing", Category: "tests", Severity: report.SeverityWarning, Message: "Aucun test détecté"}}, nil
+}
+
+// isTestFile reports whether name is a Go, TypeScript/JavaScript or Python test file.
+func isTestFile(name string) bool {
+	switch {
+	case strings.HasSuffix(name, "_test.go"):
+		return true
+	case strings.HasSuffix(name, ".test.ts"), strings.HasSuffix(name, ".test.js"),
+		strings.HasSuffix(name, ".spec.ts"), strings.HasSuffix(name, ".spec.js"):
+		return true
+	case strings.HasPrefix(name, "test_") && strings.HasSuffix(name, ".py"),
+		strings.HasSuffix(name, "_test.py"):
+		return true
+	}
+	return false
 }
 
 // detectDocs checks README.md and .env.example
@@ -1441,15 +1459,13 @@ func checkDoctorExitCode(g *globalFlags, root string, extraFindings []report.Fin
 	console := g.console()
 
 	// Detect project language
-	detector := feature.Detector{}
-	project, _ := detector.DetectLoose(root)
-	language := string(project.Language)
-	if language == "" {
-		language = "go" // default
+	rctx := ruleContext(root)
+	if rctx.Language == "" {
+		rctx.Language = "go" // default
 	}
 
 	// Run the same rules as runReport to get all findings
-	findings, err := reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+	findings, err := reg.Run(context.Background(), rctx)
 	if err != nil {
 		return &CiError{Code: 2, Err: err}
 	}
@@ -1491,6 +1507,20 @@ func checkDoctorExitCode(g *globalFlags, root string, extraFindings []report.Fin
 	return nil // success: exit code 0, nothing printed on stderr
 }
 
+// printCategoryScores prints one [PASS]/[FAIL] line per category computed by
+// report.ComputeScore, whose keys are the capitalized category names below.
+func printCategoryScores(out io.Writer, res report.Result) {
+	score := report.ComputeScore(res)
+	for _, cat := range []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"} {
+		s := score.Categories[cat]
+		status := "PASS"
+		if s < 60 {
+			status = "FAIL"
+		}
+		fmt.Fprintf(out, "  [%s] %s: %d/100\n", status, cat, s)
+	}
+}
+
 // printDoctorCiSummary prints a compact summary for doctor CI mode.
 func printDoctorCiSummary(out io.Writer, res report.Result) {
 	fmt.Fprintf(out, "ForgeKit Doctor — %s\n", res.Project)
@@ -1498,19 +1528,7 @@ func printDoctorCiSummary(out io.Writer, res report.Result) {
 	fmt.Fprintf(out, "Summary: pass=%d info=%d warning=%d error=%d critical=%d\n",
 		res.Summary.Pass, res.Summary.Info, res.Summary.Warning, res.Summary.Error, res.Summary.Critical)
 
-	// Print category scores using the score computation
-	score := report.ComputeScore(res)
-	categories := []string{"environment", "project", "security", "docker", "configuration", "dependencies", "features", "documentation"}
-	for _, cat := range categories {
-		s := score.Categories[cat]
-		if s > 0 { // Only show categories that have findings
-			status := "PASS"
-			if s < 60 {
-				status = "FAIL"
-			}
-			fmt.Fprintf(out, "  [%s] %s: %d/100\n", status, cat, s)
-		}
-	}
+	printCategoryScores(out, res)
 
 	// Print warnings and errors
 	for _, f := range res.Findings {
@@ -1618,12 +1636,8 @@ func runReport(g *globalFlags, command, root string, reg *rules.Registry, extraF
 	}
 
 	// Detect project language
-	detector := feature.Detector{}
-	projectCtx, _ := detector.DetectLoose(root)
-	language := string(projectCtx.Language)
-
 	start := time.Now()
-	findings, err := reg.Run(context.Background(), rules.Context{ProjectRoot: root, Language: language})
+	findings, err := reg.Run(context.Background(), ruleContext(root))
 	if spinner != nil {
 		if err != nil {
 			spinner.Stop("✗ Analyse interrompue")
@@ -1663,6 +1677,7 @@ func newAddCommand(g *globalFlags) *cobra.Command {
 	var list bool
 	var dryRun bool
 	var showPlan bool
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "add [feature]",
@@ -1688,7 +1703,7 @@ func newAddCommand(g *globalFlags) *cobra.Command {
 				return runFeatureList(g, registry)
 			}
 
-			return runFeatureAdd(g, registry, args[0], dryRun, showPlan)
+			return runFeatureAdd(g, registry, args[0], dryRun, showPlan, force)
 		},
 	}
 
@@ -1711,6 +1726,13 @@ func newAddCommand(g *globalFlags) *cobra.Command {
 		"plan",
 		false,
 		"Afficher le plan d'installation détaillé (fichiers à créer/modifier/supprimer, conflits, dépendances)",
+	)
+
+	cmd.Flags().BoolVar(
+		&force,
+		"force",
+		false,
+		"Remplacer les fichiers existants que la feature doit créer",
 	)
 
 	return cmd
@@ -1742,6 +1764,15 @@ func newRemoveCommand(g *globalFlags) *cobra.Command {
 	)
 
 	return cmd
+}
+
+// featureResult is the JSON output of forge add and forge remove.
+type featureResult struct {
+	SchemaVersion string   `json:"schema_version"`
+	Status        string   `json:"status"`
+	Feature       string   `json:"feature"`
+	Installed     []string `json:"installed,omitempty"`
+	DurationMs    int64    `json:"duration_ms"`
 }
 
 func runFeatureList(g *globalFlags, registry *feature.Registry) error {
@@ -1812,6 +1843,7 @@ func runFeatureAdd(
 	name string,
 	dryRun bool,
 	showPlan bool,
+	force bool,
 ) error {
 	console := g.console()
 
@@ -1898,6 +1930,7 @@ func runFeatureAdd(
 	}
 
 	// Step 4: Check prerequisites for all features (dependencies first)
+	alreadyPresent := make(map[string]bool)
 	for _, feat := range featuresToInstall {
 		if g.Format == output.FormatHuman && !g.Quiet {
 			spinner = output.NewSpinner(console.Out)
@@ -1905,7 +1938,7 @@ func runFeatureAdd(
 		}
 
 		checkErr := feat.Check(ctx, project)
-		alreadyInstalled := checkErr != nil && strings.Contains(checkErr.Error(), "déjà installée")
+		alreadyInstalled := errors.Is(checkErr, feature.ErrAlreadyInstalled)
 		if checkErr != nil {
 			if spinner != nil {
 				if alreadyInstalled {
@@ -1916,6 +1949,7 @@ func runFeatureAdd(
 			}
 			if alreadyInstalled {
 				// Skip already installed dependencies - they're already satisfied
+				alreadyPresent[feat.Name()] = true
 				if dryRun || showPlan {
 					continue // In dry-run/plan mode, just show message and continue
 				}
@@ -1929,6 +1963,19 @@ func runFeatureAdd(
 		if spinner != nil {
 			spinner.Stop(fmt.Sprintf("✓ Prérequis validés pour %q", feat.Name()))
 		}
+	}
+
+	// Nothing to do when the requested feature is already present: installing its
+	// dependencies alone would change a project the user did not ask to change.
+	if alreadyPresent[name] {
+		if g.Format == output.FormatJSON {
+			return console.PrintJSON(featureResult{SchemaVersion: report.JSONSchemaVersion, Status: "already_present", Feature: name, Installed: []string{}})
+		}
+		if g.Format == output.FormatHuman && !g.Quiet {
+			fmt.Fprintln(console.Out)
+			fmt.Fprintf(console.Out, "✓ Feature %q déjà présente, aucune modification effectuée\n", name)
+		}
+		return nil
 	}
 
 	// Step 5: Build plan for the main feature (dependencies will be installed first)
@@ -1961,20 +2008,26 @@ func runFeatureAdd(
 		return printFeaturePlan(g, plan, dryRun, showPlan)
 	}
 
+	// Refuse to overwrite existing files unless --force is given: they may hold
+	// user changes that nothing would preserve once the installation succeeds.
+	if !force {
+		existing, err := existingPlanFiles(ctx, project, featuresToInstall, alreadyPresent)
+		if err != nil {
+			return err
+		}
+		if len(existing) > 0 {
+			return fmt.Errorf("fichiers existants qui seraient écrasés : %s ; relancez avec --force pour les remplacer", strings.Join(existing, ", "))
+		}
+	}
+
 	// Step 6: Install all features in order (dependencies first)
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
 		fmt.Fprintln(console.Out, "Installation...")
 	}
 
-	// Create snapshot for rollback, covering every file the features may write
-	var installPlans []feature.Plan
-	for _, feat := range featuresToInstall {
-		if featPlan, planErr := feat.Plan(ctx, project); planErr == nil {
-			installPlans = append(installPlans, featPlan)
-		}
-	}
-	snapshot, err := createInstallSnapshot(project.Root, snapshotPaths(project.Root, installPlans...)...)
+	// Create snapshot for rollback (the whole project tree, see snapshot.go)
+	snapshot, err := createInstallSnapshot(project.Root)
 	if err != nil {
 		return fmt.Errorf("créer snapshot pour rollback: %w", err)
 	}
@@ -1982,13 +2035,8 @@ func runFeatureAdd(
 	// Install each feature in order
 	var installedNames, skippedNames []string
 	for _, feat := range featuresToInstall {
-		// Check if already installed
-		installed, _, _ := feature.IsInstalled(project.Root, feat.Name())
-		if installed {
+		if alreadyPresent[feat.Name()] {
 			skippedNames = append(skippedNames, feat.Name())
-			if g.Format == output.FormatHuman && !g.Quiet {
-				fmt.Fprintf(console.Out, "  ✓ %s déjà installé, ignoré\n", feat.Name())
-			}
 			continue
 		}
 
@@ -2025,6 +2073,7 @@ func runFeatureAdd(
 		if spinner != nil {
 			spinner.Stop(fmt.Sprintf("✓ %s installé", feat.Name()))
 		}
+		installedNames = append(installedNames, feat.Name())
 	}
 
 	if g.Format == output.FormatHuman && !g.Quiet && spinner == nil {
@@ -2064,6 +2113,30 @@ func runFeatureAdd(
 	}
 
 	return nil
+}
+
+// existingPlanFiles lists the files the given features would create that
+// already exist in the project.
+func existingPlanFiles(ctx context.Context, project feature.ProjectContext, features []feature.Feature, skip map[string]bool) ([]string, error) {
+	var existing []string
+	for _, feat := range features {
+		if skip[feat.Name()] {
+			continue
+		}
+		plan, err := feat.Plan(ctx, project)
+		if err != nil {
+			return nil, fmt.Errorf("construction du plan pour %q : %w", feat.Name(), err)
+		}
+		for _, file := range plan.Files {
+			if file.Action != feature.FileActionCreate {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(project.Root, file.Destination)); err == nil {
+				existing = append(existing, file.Destination)
+			}
+		}
+	}
+	return existing, nil
 }
 
 func runFeatureRemove(
@@ -2205,7 +2278,7 @@ func runFeatureRemove(
 	}
 
 	// Create snapshot for rollback
-	snapshot, err := createInstallSnapshot(project.Root, snapshotPaths(project.Root, plan)...)
+	snapshot, err := createInstallSnapshot(project.Root)
 	if err != nil {
 		return fmt.Errorf("créer snapshot pour rollback: %w", err)
 	}
@@ -2242,18 +2315,7 @@ func runFeatureRemove(
 
 	totalDuration := time.Since(removeStart)
 	if g.Format == output.FormatJSON {
-		type removeResult struct {
-			SchemaVersion string `json:"schema_version"`
-			Status        string `json:"status"`
-			Feature       string `json:"feature"`
-			DurationMs    int64  `json:"duration_ms"`
-		}
-		return console.PrintJSON(removeResult{
-			SchemaVersion: report.JSONSchemaVersion,
-			Status:        "removed",
-			Feature:       name,
-			DurationMs:    totalDuration.Milliseconds(),
-		})
+		return console.PrintJSON(featureResult{SchemaVersion: report.JSONSchemaVersion, Status: "removed", Feature: name, DurationMs: totalDuration.Milliseconds()})
 	}
 	if g.Format == output.FormatHuman && !g.Quiet {
 		fmt.Fprintln(console.Out)
@@ -2340,15 +2402,7 @@ func fallbackRemove(ctx context.Context, project feature.ProjectContext, plan fe
 
 	// Remove dependencies from go.mod (Go projects only)
 	if project.Language == feature.LanguageGo {
-		for _, dep := range plan.Dependencies {
-			cmd := exec.Command("go", "mod", "edit", "-droprequire", dep.Module)
-			cmd.Dir = project.Root
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				// Log but continue
-			}
-		}
+		feature.DropDependencies(project.Root, plan.Dependencies)
 
 		if err := feature.RunGoModTidy(project.Root); err != nil {
 			return fmt.Errorf("go mod tidy : %w", err)
@@ -2480,151 +2534,6 @@ func printFeaturePlan(g *globalFlags, plan feature.Plan, dryRun, showPlan bool) 
 		fmt.Fprintln(console.Out, "Aucune modification effectuée.")
 	} else {
 		fmt.Fprintln(console.Out, "Aucune modification effectuée (--dry-run).")
-	}
-
-	return nil
-}
-
-// InstallSnapshot holds the state of the project before installation for rollback.
-type InstallSnapshot struct {
-	GoModContent []byte
-	GoSumContent []byte
-	ForgeDirPath string
-	ForgeFiles   map[string][]byte
-	// Files maps project-relative paths to their previous content; a nil
-	// value means the file did not exist and must be deleted on rollback.
-	Files map[string][]byte
-}
-
-// snapshotPaths lists the files a feature operation may write: .env.example,
-// the router and main.go integration points, and the files of the given plans.
-func snapshotPaths(projectRoot string, plans ...feature.Plan) []string {
-	paths := []string{".env.example"}
-	if router := feature.FindRouterPath(projectRoot); router != "" {
-		if rel, err := filepath.Rel(projectRoot, router); err == nil {
-			paths = append(paths, rel)
-		}
-	}
-	paths = append(paths, filepath.Join("cmd", "server", "main.go"), filepath.Join("cmd", "main.go"))
-	for _, plan := range plans {
-		for _, file := range plan.Files {
-			paths = append(paths, file.Destination)
-		}
-	}
-	return paths
-}
-
-// createInstallSnapshot captures the current state of key project files,
-// plus extraPaths (relative to projectRoot).
-func createInstallSnapshot(projectRoot string, extraPaths ...string) (*InstallSnapshot, error) {
-	snapshot := &InstallSnapshot{
-		ForgeFiles: make(map[string][]byte),
-		Files:      make(map[string][]byte),
-	}
-
-	for _, rel := range extraPaths {
-		data, err := os.ReadFile(filepath.Join(projectRoot, rel))
-		if err == nil {
-			snapshot.Files[rel] = data
-		} else if os.IsNotExist(err) {
-			snapshot.Files[rel] = nil
-		} else {
-			return nil, fmt.Errorf("lire %s : %w", rel, err)
-		}
-	}
-
-	// Snapshot go.mod
-	if data, err := os.ReadFile(filepath.Join(projectRoot, "go.mod")); err == nil {
-		snapshot.GoModContent = data
-	}
-
-	// Snapshot go.sum
-	if data, err := os.ReadFile(filepath.Join(projectRoot, "go.sum")); err == nil {
-		snapshot.GoSumContent = data
-	}
-
-	// Snapshot .forge directory
-	forgeDir := filepath.Join(projectRoot, ".forge")
-	snapshot.ForgeDirPath = forgeDir
-	if info, err := os.Stat(forgeDir); err == nil && info.IsDir() {
-		filepath.WalkDir(forgeDir, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
-			if data, err := os.ReadFile(path); err == nil {
-				relPath, _ := filepath.Rel(projectRoot, path)
-				snapshot.ForgeFiles[relPath] = data
-			}
-			return nil
-		})
-	}
-
-	return snapshot, nil
-}
-
-// restoreInstallSnapshot restores the project state from a snapshot.
-func restoreInstallSnapshot(projectRoot string, snapshot *InstallSnapshot) error {
-	// Restore go.mod
-	if len(snapshot.GoModContent) > 0 {
-		if err := os.WriteFile(filepath.Join(projectRoot, "go.mod"), snapshot.GoModContent, 0o644); err != nil {
-			return fmt.Errorf("restaurer go.mod: %w", err)
-		}
-	} else {
-		// If no go.mod was present, remove it
-		_ = os.Remove(filepath.Join(projectRoot, "go.mod"))
-	}
-
-	// Restore go.sum
-	if len(snapshot.GoSumContent) > 0 {
-		if err := os.WriteFile(filepath.Join(projectRoot, "go.sum"), snapshot.GoSumContent, 0o644); err != nil {
-			return fmt.Errorf("restaurer go.sum: %w", err)
-		}
-	} else {
-		_ = os.Remove(filepath.Join(projectRoot, "go.sum"))
-	}
-
-	// Restore .forge directory
-	if snapshot.ForgeDirPath != "" {
-		// Remove current .forge
-		_ = os.RemoveAll(snapshot.ForgeDirPath)
-		// Restore from snapshot
-		for relPath, data := range snapshot.ForgeFiles {
-			fullPath := filepath.Join(projectRoot, relPath)
-			if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-				return fmt.Errorf("créer répertoire %s: %w", filepath.Dir(fullPath), err)
-			}
-			if err := os.WriteFile(fullPath, data, 0o644); err != nil {
-				return fmt.Errorf("restaurer %s: %w", relPath, err)
-			}
-		}
-	}
-
-	// Restore or delete the other captured files. Directories left empty by
-	// deleted files (e.g. internal/cors) are removed as well.
-	for relPath, data := range snapshot.Files {
-		fullPath := filepath.Join(projectRoot, relPath)
-		if data == nil {
-			if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("supprimer %s: %w", relPath, err)
-			}
-			for dir := filepath.Dir(fullPath); dir != projectRoot && strings.HasPrefix(dir, projectRoot); dir = filepath.Dir(dir) {
-				if os.Remove(dir) != nil {
-					break // not empty (or already gone)
-				}
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-			return fmt.Errorf("créer répertoire %s: %w", filepath.Dir(fullPath), err)
-		}
-		if err := os.WriteFile(fullPath, data, 0o644); err != nil {
-			return fmt.Errorf("restaurer %s: %w", relPath, err)
-		}
-	}
-
-	// Run go mod tidy to restore consistency (Go projects only)
-	if len(snapshot.GoModContent) > 0 {
-		_ = feature.RunGoModTidy(projectRoot)
 	}
 
 	return nil

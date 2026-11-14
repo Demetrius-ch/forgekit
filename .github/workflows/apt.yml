@@ -141,5 +141,5 @@ jobs:
           echo ""
           echo "Install with:"
           echo "  curl -fsSL https://demetrius-ch.github.io/forgekit/forgekit-archive-keyring.gpg | sudo gpg --dearmor -o /usr/share/keyrings/forgekit-archive-keyring.gpg"
-          echo "  echo \"deb [signed-by=/usr/share/keyrings/forgekit-archive-keyring.gpg] https://demetrius-ch.github.io/forgekit stable main\" | sudo tee /etc/apt/sources.list.d/forgekit.sources"
+          echo "  echo \"deb [signed-by=/usr/share/keyrings/forgekit-archive-keyring.gpg] https://demetrius-ch.github.io/forgekit stable main\" | sudo tee /etc/apt/sources.list.d/forgekit.list"
           echo "  sudo apt update && sudo apt install forgekit"
