@@ -215,6 +215,9 @@ func TestCIModeOnFreshProjectE2E(t *testing.T) {
 		if strings.Contains(string(out), "erreur") {
 			t.Fatalf("forge %s --ci printed an error on success:\n%s", command, out)
 		}
+		if !strings.Contains(string(out), "[PASS]") {
+			t.Fatalf("forge %s --ci should print the category scores:\n%s", command, out)
+		}
 	}
 }
 

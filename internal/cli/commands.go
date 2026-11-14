@@ -1307,17 +1307,7 @@ func printCiSummary(out io.Writer, res report.Result) {
 	fmt.Fprintf(out, "Summary: pass=%d info=%d warning=%d error=%d critical=%d\n",
 		res.Summary.Pass, res.Summary.Info, res.Summary.Warning, res.Summary.Error, res.Summary.Critical)
 
-	// Print category scores
-	score := report.ComputeScore(res)
-	categories := []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"}
-	for _, cat := range categories {
-		s := score.Categories[cat]
-		status := "PASS"
-		if s < 60 {
-			status = "FAIL"
-		}
-		fmt.Fprintf(out, "  [%s] %s: %d/100\n", status, cat, s)
-	}
+	printCategoryScores(out, res)
 
 	// Print warnings and errors
 	for _, f := range res.Findings {
@@ -1517,6 +1507,20 @@ func checkDoctorExitCode(g *globalFlags, root string, extraFindings []report.Fin
 	return nil // success: exit code 0, nothing printed on stderr
 }
 
+// printCategoryScores prints one [PASS]/[FAIL] line per category computed by
+// report.ComputeScore, whose keys are the capitalized category names below.
+func printCategoryScores(out io.Writer, res report.Result) {
+	score := report.ComputeScore(res)
+	for _, cat := range []string{"Architecture", "Tests", "Security", "Configuration", "Docker", "Documentation"} {
+		s := score.Categories[cat]
+		status := "PASS"
+		if s < 60 {
+			status = "FAIL"
+		}
+		fmt.Fprintf(out, "  [%s] %s: %d/100\n", status, cat, s)
+	}
+}
+
 // printDoctorCiSummary prints a compact summary for doctor CI mode.
 func printDoctorCiSummary(out io.Writer, res report.Result) {
 	fmt.Fprintf(out, "ForgeKit Doctor — %s\n", res.Project)
@@ -1524,19 +1528,7 @@ func printDoctorCiSummary(out io.Writer, res report.Result) {
 	fmt.Fprintf(out, "Summary: pass=%d info=%d warning=%d error=%d critical=%d\n",
 		res.Summary.Pass, res.Summary.Info, res.Summary.Warning, res.Summary.Error, res.Summary.Critical)
 
-	// Print category scores using the score computation
-	score := report.ComputeScore(res)
-	categories := []string{"environment", "project", "security", "docker", "configuration", "dependencies", "features", "documentation"}
-	for _, cat := range categories {
-		s := score.Categories[cat]
-		if s > 0 { // Only show categories that have findings
-			status := "PASS"
-			if s < 60 {
-				status = "FAIL"
-			}
-			fmt.Fprintf(out, "  [%s] %s: %d/100\n", status, cat, s)
-		}
-	}
+	printCategoryScores(out, res)
 
 	// Print warnings and errors
 	for _, f := range res.Findings {
